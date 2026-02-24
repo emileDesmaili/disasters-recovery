@@ -1,0 +1,877 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, quiet=TRUE}
+library(fixest)
+library(tidyverse)
+library(marginaleffects)
+library(lmerTest)
+library(gam)
+library(splines)
+library(ggplot2)
+library(gridExtra)
+library(useful)
+library(fixest)
+library(useful)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(patchwork)
+library(rms)
+library(tidycensus)
+library(tigris)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(did)
+library(haven)
+library(bea.R)
+library(lpdid)
+library(DIDmultiplegtDYN)
+
+options(tigris_use_cache = TRUE)
+
+source('emileRegs.R')
+```
+# Data
+
+```{r}
+dataTC <- read_stata('raw data/full_geoid_pair_panel.dta')
+
+colnames(dataTC)
+
+```
+
+```{r}
+dataTC$from_geoid <- ifelse(nchar(dataTC$from_geoid) == 4,
+                            paste0("0", dataTC$from_geoid),
+                            dataTC$from_geoid)
+dataTC <- dataTC %>% select(
+    from_geoid,
+    move_year,storm,
+    approvedforfemaassistance) %>% 
+  distinct()
+
+
+# 3. Request county real GDP (CAGDP2 = real GDP, chained dollars)
+
+beaKey <- '1D7A5FF9-69D7-403F-B74A-9F6B4C7B2424'
+req <- list(
+  'UserID' = beaKey,
+  'Method' = 'GetData',
+  'datasetname' = 'Regional',
+  'TableName' = 'CAGDP2',     # Real GDP by county
+  'GeoFIPS' = 'COUNTY',       # All US counties
+  'Year' = 'ALL',
+    'LineCode' = '1'
+)
+
+
+req <- list(
+  'UserID' = beaKey,
+  'Method' = 'GetData',
+  'datasetname' = 'Regional',
+  'TableName' = 'CAINC1',     # Real GDP by county
+  'GeoFIPS' = 'COUNTY',       # All US counties
+  'Year' = 'ALL',
+    'LineCode' = '1'
+)
+
+inc_raw <- beaGet(req)
+
+
+#  Clean BEA GDP data
+gdp_df <- gdp_raw %>%
+  pivot_longer(
+    cols = starts_with("DataValue_"),
+    names_to = "year_col",
+    values_to = "gdp"
+  ) %>%
+  mutate(
+    year = as.integer(str_extract(year_col, "\\d{4}")),
+    county_id = GeoFips,
+    county_name = GeoName
+  ) %>%
+  select(
+    year,
+    county_id,
+    county_name,
+    gdp
+  )
+
+
+inc_df <- inc_raw %>%
+  pivot_longer(
+    cols = starts_with("DataValue_"),
+    names_to = "year_col",
+    values_to = "income"
+  ) %>%
+  mutate(
+    year = as.integer(str_extract(year_col, "\\d{4}")),
+    county_id = GeoFips,
+    county_name = GeoName
+  ) %>%
+  select(
+    year,
+    county_id,
+    county_name,
+    income
+  )
+
+econ_df <- inc_df %>%
+  left_join(gdp_df, by = c("year", "county_id", "county_name"))
+
+#. Load county FIPS + names from tidycensus
+data("fips_codes")
+
+county_names <- fips_codes %>%
+  transmute(
+    state,
+    state_code,
+    county,
+    county_id = paste0(state_code, county_code),
+  )
+
+#. Merge GDP with county names
+county_gdp_panel <- econ_df %>%
+  left_join(county_names, by = "county_id") %>%
+  relocate(state, county, .after = county_id) %>%
+  arrange(year, county_id)
+
+#get gdp diff by county
+county_gdp_panel <- county_gdp_panel %>%
+  arrange(county_id, year) %>%  # safer than group_by(..) + arrange separately
+  group_by(county_id) %>%
+  mutate(
+    loggdp     = log(gdp),
+    loggdp_lag = lag(loggdp),
+    gdp_diff   = loggdp - loggdp_lag,
+    loginc    = log(income),
+    loginc_lag = lag(loginc),
+    inc_diff  = loginc - loginc_lag,
+  ) %>%
+  ungroup()
+
+county_gdp_panel$GEOID <- county_gdp_panel$county_id
+
+counties <- counties(cb = TRUE)    #
+states <- states(cb = TRUE)   
+
+df_map <- counties %>%
+  left_join(county_gdp_panel, by = "GEOID")
+
+data <- county_gdp_panel %>%
+  left_join(dataTC, by = c("GEOID" = "from_geoid", "year" = "move_year"))
+  
+
+df_chaz <- read_csv('raw data/df_migration_hurricane.csv')
+
+#merge with gdp data
+
+data_tc <- data %>%
+  left_join(df_chaz, by = c("GEOID", "year"))
+data_tc$decade <- floor(data_tc$year / 10) * 10
+
+
+data_tc$avg_gustW_peak <- ifelse(is.na(data_tc$avg_gustW_peak), 0, data_tc$avg_gustW_peak)
+data_tc$avg_sustW_max <-ifelse(is.na(data_tc$avg_sustW_max), 0, data_tc$avg_sustW_max)
+data_tc$fema_assistance <- ifelse(is.na(data_tc$approvedforfemaassistance), 0, data_tc$approvedforfemaassistance)
+
+
+
+#add first diff of log income and storm
+data_tc <- data_tc %>%
+  group_by(county_id) %>%
+  arrange(year) %>%
+  mutate(
+    gust_q95 = quantile(max_gustW_peak, 0.95, na.rm = TRUE),
+    sust_q95 = quantile(max_sustW_max, 0.95, na.rm = TRUE),
+    gust_p95 = ifelse(max_gustW_peak >= gust_q95, 1, 0),
+    sust_p95 = ifelse(max_sustW_max >= sust_q95, 1, 0),
+    gust_20 = ifelse(max_gustW_peak >20 , 1, 0),
+    sust_20 = ifelse(max_sustW_max > 20, 1, 0),
+  ) %>%
+  ungroup() 
+
+data_tc <- data_tc %>%
+  mutate(time  = year, time2 = year^2, decade = 10*floor(year/10),
+        period = case_when(
+          year <2005 ~ "1992-2005",
+          year >=2006 ~ "2006-2019"
+        )) %>% 
+  filter(year<=2019) %>% 
+  filter(gdp >0 & income>0)
+
+
+```
+
+
+# MAPS
+
+```{r}
+years <- sort(unique(data$year))
+
+for (yr in years) {
+  
+  # 1. Filter one year, summarize by county (optional but keeps one row per GEOID)
+  df_sum <- data %>%
+    filter(year == yr) 
+  
+  # 2. Join summarized values back to geometry
+  df_plot <- counties %>%
+    left_join(df_sum, by = "GEOID")
+  
+  # 3. Plot 
+  p <- ggplot(df_plot) +
+    geom_sf(aes(fill = gdp_diff),color=alpha('gray',0.5),linewidth=0.2) +
+    scale_fill_stepsn(
+      colours = scales::brewer_pal(type = "div", palette = "RdYlBu")(5),
+      breaks  = c(  -0.15,-0.05, -0.025, -0.01, 0.01, 0.025, 0.05, 0.15),
+      limits  = c(-0.15, 0.15),
+        labels  = scales::percent_format(accuracy = 1), 
+      na.value = "grey90"
+    )  +
+    geom_sf(data = states, fill = NA, color = "white", linewidth = 0.8) +
+    labs(
+      title = paste("County GDP", yr),
+      fill  = "GDP growth YoY"
+    ) +
+  coord_sf(
+    xlim = c(-135, -65),
+    ylim = c(24, 50),
+    expand=FALSE
+  )  +
+    theme_void()
+  
+  print(p)
+}
+```
+
+
+# LP IRF
+
+```{r}
+fe <- feols(
+  gdp_diff ~ storm  | 
+    county_id[time] + county_id[time2] + year ,
+  data = data_tc,
+  vcov = DK ~ year
+)
+
+summary(fe)
+```
+
+
+```{r}
+irfs_wind_cumulative <- cumulative_dl(
+  data = data_tc,
+  outcome = "gdp_diff",
+  main_var = "storm",
+  lags = 0:10,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year,
+  shock_label = "Maximum Wind Speed Treatment"
+) %>% mutate(type = "Distributed Lag")
+
+irfs_wind_lp <- lp_panel(
+  data = data_tc,
+  outcome = "loggdp",
+  main_var = "storm",
+  horizon = 10,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% mutate(type = "Local Projection")
+
+irfs_combined <- bind_rows(irfs_wind_cumulative, irfs_wind_lp)
+
+
+# Plot both as a facet
+ggplot(irfs_combined, aes(x = ifelse(type == "Distributed Lag", lag, horizon), 
+                          y = ifelse(type == "Distributed Lag", cumulative_effect, irf_mean))) +
+  geom_line(linewidth = 1.1, color = 'cornflowerblue') +
+  geom_ribbon(aes(ymin = ifelse(type == "Distributed Lag", lower_ci, irf_down), 
+                  ymax = ifelse(type == "Distributed Lag", upper_ci, irf_up)), 
+              alpha = 0.2, fill = 'cornflowerblue', color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(x = "Years after Treatment",
+       y = "Effect on Income Growth",
+       title = "IRF of Storm Treatment on Income Growth") +
+  facet_wrap(~type, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+
+```{r}
+irfs_wind_cumulative <- cumulative_dl(
+  data = data_tc,
+  outcome = "inc_diff",
+  main_var = "storm",
+  lags = 0:10,
+  fe = "county_id[time] + county_id[time2] + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year,
+  shock_label = "Maximum Wind Speed Treatment"
+) %>% mutate(type = "Distributed Lag")
+
+irfs_wind_lp <- lp_panel(
+  data = data_tc,
+  outcome = "loginc",
+  main_var = "storm",
+  horizon = 10,
+  fe = "county_id[time] + county_id[time2] + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% mutate(type = "Local Projection")
+
+irfs_combined <- bind_rows(irfs_wind_cumulative, irfs_wind_lp)
+
+
+# Plot both as a facet
+ggplot(irfs_combined, aes(x = ifelse(type == "Distributed Lag", lag, horizon), 
+                          y = ifelse(type == "Distributed Lag", cumulative_effect, irf_mean))) +
+  geom_line(linewidth = 1.1, color = 'cornflowerblue') +
+  geom_ribbon(aes(ymin = ifelse(type == "Distributed Lag", lower_ci, irf_down), 
+                  ymax = ifelse(type == "Distributed Lag", upper_ci, irf_up)), 
+              alpha = 0.2, fill = 'cornflowerblue', color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(x = "Years after Treatment",
+       y = "Effect on Income Growth",
+       title = "IRF of Storm Treatment on Income Growth") +
+  facet_wrap(~type, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+
+
+
+```{r}
+results_lp1 <- lp_panel_inter(
+  data = data_tc,
+  outcome = "loggdp",
+  main_var = "storm",
+  interact_var = "decade",
+  horizon = 5,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "GDP")
+
+results_lp2 <- lp_panel_inter(
+  data = data_tc ,
+  outcome = "loginc",
+  main_var = "storm",
+  interact_var = "decade",
+  horizon = 5,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "Income") 
+
+irfs_combined <- bind_rows(results_lp1, results_lp2)
+
+
+# Plot both
+ggplot( irfs_combined, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_line(linewidth = 1.1) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), 
+              alpha = 0.15, color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(
+    x = "Years after Treatment",
+    y = "Effect on GDP",
+    title = "IRF of Storm Treatment on GDP"
+  ) +
+  facet_wrap(~model, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+
+```{r, fig.width=10, fig.height=6}
+results_lp1 <- lp_panel_inter(
+  data = data_tc,
+  outcome = "loginc",
+  main_var = "storm",
+  interact_var = "state",
+  horizon = 5,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "Income")
+
+results_lp2 <- lp_panel_inter(
+  data = data_tc ,
+  outcome = "loggdp",
+  main_var = "storm",
+  interact_var = "state",
+  horizon = 5,
+  fe = "county_id[time] + county_id[time2] + year + state^year",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "GDP") 
+
+irfs_combined <- bind_rows(results_lp1, results_lp2)
+
+
+# Plot both
+ggplot( irfs_combined, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_line(linewidth = 1.1) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), 
+              alpha = 0.15, color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(
+    x = "Years after Treatment",
+    y = "Effect on GDP",
+    title = "IRF of Storm Treatment on GDP"
+  ) +
+  facet_wrap(~model, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+```{r}
+results_lp1 <- lp_panel_inter(
+  data = data_tc,
+  outcome = "loginc",
+  main_var = "storm",
+  interact_var = "period",
+  horizon = 6,
+  fe = "county_id[time] + county_id[time2] + year + year^state",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "Income")
+
+results_lp2 <- lp_panel_inter(
+  data = data_tc ,
+  outcome = "loggdp",
+  main_var = "storm",
+  interact_var = "decade",
+  horizon = 6,
+  fe = "county_id[time] + county_id[time2] + year + year^state",
+  panel_id = c("county_id", "year"),
+  vcov_formula = DK ~ year
+) %>% 
+  mutate(model = "GDP") 
+
+irfs_combined <- bind_rows(results_lp1, results_lp2)
+
+
+# Plot both
+ggplot( irfs_combined, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_line(linewidth = 1.1) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), 
+              alpha = 0.15, color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(
+    x = "Years after Treatment",
+    y = "Effect on GDP",
+    title = "IRF of Storm Treatment on GDP"
+  ) +
+  facet_wrap(~model, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+
+
+
+
+# DiD Katrina
+
+```{r}
+katrina_states <- c("FL", "LA", "MS", "AL", 'GA')
+
+katrina_counties <- data_tc %>%
+  filter(
+    state %in% katrina_states,
+    year == 2005,
+    storm > 0
+  ) %>%
+  distinct(county_id) %>%
+  pull(county_id)
+
+# -----------------------------
+# Pre-Katrina characteristics
+# -----------------------------
+pre_katrina_data <- data_tc %>%
+  filter(year < 2005)
+
+county_states <- data_tc %>%
+  distinct(county_id, state)
+
+trend_level <- pre_katrina_data %>%
+  group_by(county_id) %>%
+  filter(n() >= 3) %>%
+  summarise(
+    trend_gdp = coef(lm(loggdp ~ year))[["year"]],
+    level_gdp = mean(loggdp, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(county_states, by = "county_id") %>%
+  mutate(
+    trend_z = as.numeric(scale(trend_gdp)),
+    level_z = as.numeric(scale(level_gdp))
+  )
+
+# -----------------------------
+# Katrina target (county avg)
+# -----------------------------
+target <- trend_level %>%
+  filter(county_id %in% katrina_counties) %>%
+  summarise(
+    trend_z = mean(trend_z, na.rm = TRUE),
+    level_z = mean(level_z, na.rm = TRUE)
+  )
+
+# -----------------------------
+# Donor counties (non-Katrina)
+# -----------------------------
+matched_donors <- trend_level %>%
+  filter(!county_id %in% katrina_counties) %>%
+  mutate(
+    dist = sqrt(
+      (trend_z - target$trend_z)^2 +
+      (level_z - target$level_z)^2
+    )
+  ) %>%
+  arrange(dist)
+
+matched_donors %>% slice(1:25)
+```
+
+
+```{r, fig.width=5, fig.height=5}
+donor_counties <- matched_donors %>%
+  slice(1:200) %>%
+  pull(county_id)
+
+plot_df <- data_tc %>%
+  filter(
+    county_id %in% c(katrina_counties, donor_counties),
+    year >= 2000, year <= 2020
+  ) %>%
+  group_by(county_id) %>%
+  mutate(
+    gdp_2004  = loggdp[year == 2004][1],
+    gdp_index = 100 * exp(loggdp - gdp_2004)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    group = case_when(
+      county_id %in% katrina_counties ~ "Katrina counties",
+      county_id %in% donor_counties   ~ "Donor counties"
+    )
+  )
+
+ggplot(plot_df,
+       aes(x = year, y = gdp_index,
+           group = county_id,
+           color = group)) +
+  geom_line(alpha = 0.4, linewidth = 0.7) +
+  geom_smooth(
+    data = subset(plot_df, year <= 2004),
+    aes(group = group),
+    method = "lm",
+    se = FALSE,
+    linetype = "dashed",
+    linewidth = 1
+  ) +
+  geom_vline(xintercept = 2005,
+             linetype = "dashed",
+             linewidth = 0.8,
+             color = "black") +
+  scale_color_manual(values = c(
+    "Katrina counties" = "#e31a1c",
+    "Donor counties"  = "#1f78b4"
+  )) +
+  labs(
+    x = "Year",
+    y = "GDP (Index, 2004 = 100)",
+    color = ""
+  ) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top")
+
+ggsave("figures/katrina_timeseries_county.png", dpi=300)
+
+```
+
+
+```{r}
+donor_counties <- matched_donors %>%
+  slice(1:200) %>%
+  pull(county_id)
+
+treated_counties <- trend_level %>%
+  filter(county_id %in% katrina_counties) %>%
+  pull(county_id)
+
+county_groups <- tibble(
+  county_id = c(treated_counties, donor_counties),
+  group = c(
+    rep("Katrina counties", length(treated_counties)),
+    rep("Donor counties",   length(donor_counties))
+  )
+)
+
+df_plot <- counties %>%                     # counties = sf object
+  left_join(county_groups, by = c("GEOID" = "county_id")) %>%
+  mutate(group = if_else(is.na(group), "Other counties", group))
+
+ggplot(df_plot) +
+  geom_sf(aes(fill = group), color = NA) +
+  scale_fill_manual(values = c(
+    "Katrina counties" = "#e31a1c",
+    "Donor counties"   = "#1f78b4",
+    "Other counties"   = "grey90"
+  )) +
+  geom_sf(data = states, fill = NA, color = "white", linewidth = 0.6) +
+  coord_sf(
+    xlim = c(-130, -70),
+    ylim = c(24, 50),
+    expand = FALSE
+  ) +
+  labs(fill = "") +
+  theme_void()
+
+```
+
+
+```{r}
+# -----------------------------
+# Define Katrina treatment
+# -----------------------------
+data_tc <- data_tc %>%
+  mutate(
+    katrina = ifelse(year >= 2005 & county_id %in% katrina_counties, 1, 0)
+  )
+
+donor_counties <- matched_donors %>%
+  slice(1:200) %>%
+  pull(county_id)
+
+data_tc <- data_tc %>%
+  filter(county_id %in% c(katrina_counties, donor_counties)) %>%
+  group_by(county_id) %>%
+  mutate(
+    g = ifelse(any(katrina == 1), min(year[katrina == 1]), 9999)
+  ) %>%
+  ungroup() %>%
+  mutate(GEOID = as.numeric(county_id))
+
+# -----------------------------
+# Callaway & Sant’Anna
+# -----------------------------
+cs <- att_gt(
+  yname  = "loggdp",
+  tname  = "year",
+  idname = "GEOID",
+  gname  = "g",
+  data   = data_tc,
+  panel  = TRUE,
+  allow_unbalanced_panel = TRUE
+)
+
+cs_df <- aggte(cs, type = "dynamic") %>%
+  with(data.frame(
+    event_time = egt,
+    att        = att.egt,
+    se         = se.egt,
+    method     = "Callaway & Sant’Anna"
+  )) %>%
+  filter(event_time >= -3 & event_time <= 13)
+
+# -----------------------------
+# LP-DiD
+# -----------------------------
+reg <- lpdid(
+  data_tc,
+  window = c(-3, 13),
+  y = "loggdp",
+  outcome_lags = 0,
+  unit_index = "GEOID",
+  time_index = "year",
+  controls = "county_id:time + county_id:time2",
+  treat_status = "katrina"
+)
+
+lpdid_df <- as.data.frame(reg$coeftable) %>%
+  mutate(
+    event_time = -3:13,
+    att        = Estimate,
+    se         = `Std. Error`,
+    method     = "LP-DiD"
+  ) %>%
+  select(event_time, att, se, method)
+
+# -----------------------------
+# de Chaisemartin & D’Haultfœuille
+# -----------------------------
+ch_df <- did_multiplegt_dyn(
+  df        = data_tc,
+  outcome   = "loggdp",
+  group     = "county_id",
+  time      = "year",
+  treatment = "katrina",
+  trends_lin = F,
+  effects   = 13,  # post-treatment
+  placebo   = 3,   # pre-treatment
+  cluster   = "county_id"
+)$plot$data %>%
+  filter(Time >= -3 & Time <= 13) %>%
+  transmute(
+    event_time = Time,
+    att        = Estimate,
+    se         = (UB.CI - LB.CI) / (2 * 1.96),
+    method     = "de Chaisemartin & D’Haultfœuille"
+  )
+
+# -----------------------------
+# Sun & Abraham
+# -----------------------------
+data_tc <- data_tc %>%
+  group_by(county_id) %>%
+  mutate(
+    treat_year = ifelse(any(katrina == 1), min(year[katrina == 1]), 9999),
+  ) %>%
+  ungroup()
+
+did_sunab <- feols(
+  loggdp ~ sunab(treat_year, year) | county_id + year,
+  data = data_tc,
+  vcov = ~county_id
+)
+
+sunab_df <- broom::tidy(did_sunab) %>%
+  filter(grepl("year::", term)) %>%
+  mutate(
+    event_time = as.numeric(sub(".*::", "", term)),
+    att        = estimate,
+    se         = std.error,
+    method     = "Sun & Abraham"
+  ) %>%
+  filter(event_time >= -3 & event_time <= 13) %>%
+  select(event_time, att, se, method)
+
+# -----------------------------
+# Combine all
+# -----------------------------
+es_all <- bind_rows(cs_df, lpdid_df, ch_df, sunab_df) %>%
+  mutate(
+    period = ifelse(event_time < 0, "Pre-treatment", "Post-treatment"),
+    calendar_year = 2005 + event_time
+  )
+
+# -----------------------------
+# Faceted event-study plot
+# -----------------------------
+ggplot(es_all,
+       aes(x = calendar_year, y = att,
+           color = period, fill = period)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_vline(xintercept = 2005, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = att - 1.96 * se,
+                  ymax = att + 1.96 * se),
+              alpha = 0.25, color = NA) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ method, ncol = 2, scales = "free_x") +
+  scale_color_manual(values = c(
+    "Pre-treatment"  = "#1f78b4",
+    "Post-treatment" = "#e31a1c"
+  )) +
+  scale_fill_manual(values = c(
+    "Pre-treatment"  = "#1f78b4",
+    "Post-treatment" = "#e31a1c"
+  )) +
+  labs(
+    x = "Year",
+    y = "GDP % variation",
+    color = "",
+    fill  = ""
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold")
+  )
+
+
+```
+
+
+
+
+
+```{r, fig.width=5, fig.height=5}
+# -----------------------------
+# Faceted event-study plot
+# -----------------------------
+es_all <- es_all %>%
+  filter(method == "Callaway & Sant’Anna")
+
+ggplot(es_all,
+       aes(x = calendar_year, y = att,
+           color = period, fill = period)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_vline(xintercept = 2005, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = att - 1.96 * se,
+                  ymax = att + 1.96 * se),
+              alpha = 0.25, color = NA) +
+  geom_line(linewidth = 1) +
+  scale_color_manual(values = c(
+    "Pre-treatment"  = "#1f78b4",
+    "Post-treatment" = "#e31a1c"
+  )) +
+  scale_fill_manual(values = c(
+    "Pre-treatment"  = "#1f78b4",
+    "Post-treatment" = "#e31a1c"
+  )) +
+  labs(
+    x = "Year",
+    y = "GDP % variation",
+    color = "",
+    fill  = ""
+  ) +
+    ylim(-0.2, 0.05) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold")
+  )
+ggsave("figures/katrina_did_county.png", dpi=300)
+
+```
+
+
+

@@ -1,0 +1,37 @@
+
+\begingroup
+\centering
+\begin{tabular}{lccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{5}{c}{ln\_tfp}\\
+   Model:                      & (1)     & (2)     & (3)     & (4)     & (5)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots        & -0.895  & -0.962  & -1.05   & -1.05   & -0.975\\   
+                               & (0.807) & (0.837) & (0.908) & (0.914) & (0.857)\\   
+   l(maxwind\_sqkm\_knots,1)   &         & -0.916  & -1.01   & -0.976  & -0.960\\   
+                               &         & (0.705) & (0.793) & (0.784) & (0.787)\\   
+   l(maxwind\_sqkm\_knots,2)   &         &         & -1.00   & -0.965  & -0.901\\   
+                               &         &         & (0.953) & (0.961) & (0.933)\\   
+   l(maxwind\_sqkm\_knots,3)   &         &         &         & -1.14   & -1.03\\   
+                               &         &         &         & (1.20)  & (1.11)\\   
+   l(maxwind\_sqkm\_knots,4)   &         &         &         &         & -0.916\\   
+                               &         &         &         &         & (0.981)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                        & Yes     & Yes     & Yes     & Yes     & Yes\\  
+   countrycode                 & Yes     & Yes     & Yes     & Yes     & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)          & Yes     & Yes     & Yes     & Yes     & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                & 4,881   & 4,753   & 4,625   & 4,497   & 4,369\\  
+   Adjusted R$^2$              & 0.97373 & 0.97419 & 0.97453 & 0.97491 & 0.97526\\  
+   \midrule \midrule
+   \multicolumn{6}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{6}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+

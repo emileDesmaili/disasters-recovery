@@ -1,0 +1,278 @@
+
+\begingroup
+\centering
+\begin{tabular}{lccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variables: & loggdp & \multicolumn{4}{c}{ln\_tfp}\\
+   Model:                                                     & (1)      & (2)            & (3)            & (4)            & (5)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots $\times$ period $=$ Post-1990         & -0.0304  & -1.197$^{**}$  & -1.403$^{**}$  & -1.472$^{*}$   & -1.540$^{*}$\\   
+                                                              & (0.2733) & (0.5746)       & (0.7000)       & (0.7747)       & (0.8506)\\   
+   maxwind\_sqkm\_knots $\times$ period $=$ Pre-1990          & -0.5247  & -8.154$^{***}$ & -9.444$^{***}$ & -10.37$^{***}$ & -9.482$^{***}$\\   
+                                                              & (0.3913) & (3.020)        & (3.043)        & (2.993)        & (2.039)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Post-1990    &          & -1.460$^{*}$   & -1.666$^{*}$   & -1.743$^{*}$   & -1.804$^{*}$\\   
+                                                              &          & (0.7471)       & (0.8706)       & (0.9688)       & (1.032)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Pre-1990     &          & -3.207         & -4.461         & -5.537         & -6.230\\   
+                                                              &          & (2.645)        & (3.167)        & (3.800)        & (4.424)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Post-1990    &          &                & -1.593$^{*}$   & -1.668$^{*}$   & -1.741\\   
+                                                              &          &                & (0.8817)       & (0.9802)       & (1.070)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Pre-1990     &          &                & -5.809         & -6.864$^{*}$   & -7.285\\   
+                                                              &          &                & (3.538)        & (4.029)        & (4.512)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Post-1990    &          &                &                & -1.564         & -1.608\\   
+                                                              &          &                &                & (1.302)        & (1.356)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Pre-1990     &          &                &                & -3.268         & -4.070\\   
+                                                              &          &                &                & (3.705)        & (4.663)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Post-1990    &          &                &                &                & -1.440\\   
+                                                              &          &                &                &                & (1.084)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Pre-1990     &          &                &                &                & 0.0314\\   
+                                                              &          &                &                &                & (5.093)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                                                       & Yes      & Yes            & Yes            & Yes            & Yes\\  
+   countrycode                                                & Yes      & Yes            & Yes            & Yes            & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)                                         & Yes      & Yes            & Yes            & Yes            & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                                               & 7,641    & 6,033          & 5,905          & 5,777          & 5,649\\  
+   Adjusted R$^2$                                             & 0.98528  & 0.96968        & 0.97021        & 0.97068        & 0.97101\\  
+   \midrule \midrule
+   \multicolumn{6}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{6}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+
+
+\begingroup
+\centering
+\begin{tabular}{lccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{5}{c}{ln\_tfp}\\
+   Model:                                                     & (1)           & (2)            & (3)            & (4)            & (5)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots $\times$ period $=$ Post-1990         & -1.060$^{**}$ & -1.197$^{**}$  & -1.403$^{**}$  & -1.472$^{*}$   & -1.540$^{*}$\\   
+                                                              & (0.4955)      & (0.5746)       & (0.7000)       & (0.7747)       & (0.8506)\\   
+   maxwind\_sqkm\_knots $\times$ period $=$ Pre-1990          & -7.402$^{**}$ & -8.154$^{***}$ & -9.444$^{***}$ & -10.37$^{***}$ & -9.482$^{***}$\\   
+                                                              & (3.130)       & (3.020)        & (3.043)        & (2.993)        & (2.039)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Post-1990    &               & -1.460$^{*}$   & -1.666$^{*}$   & -1.743$^{*}$   & -1.804$^{*}$\\   
+                                                              &               & (0.7471)       & (0.8706)       & (0.9688)       & (1.032)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Pre-1990     &               & -3.207         & -4.461         & -5.537         & -6.230\\   
+                                                              &               & (2.645)        & (3.167)        & (3.800)        & (4.424)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Post-1990    &               &                & -1.593$^{*}$   & -1.668$^{*}$   & -1.741\\   
+                                                              &               &                & (0.8817)       & (0.9802)       & (1.070)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Pre-1990     &               &                & -5.809         & -6.864$^{*}$   & -7.285\\   
+                                                              &               &                & (3.538)        & (4.029)        & (4.512)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Post-1990    &               &                &                & -1.564         & -1.608\\   
+                                                              &               &                &                & (1.302)        & (1.356)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Pre-1990     &               &                &                & -3.268         & -4.070\\   
+                                                              &               &                &                & (3.705)        & (4.663)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Post-1990    &               &                &                &                & -1.440\\   
+                                                              &               &                &                &                & (1.084)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Pre-1990     &               &                &                &                & 0.0314\\   
+                                                              &               &                &                &                & (5.093)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                                                       & Yes           & Yes            & Yes            & Yes            & Yes\\  
+   countrycode                                                & Yes           & Yes            & Yes            & Yes            & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)                                         & Yes           & Yes            & Yes            & Yes            & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                                               & 6,161         & 6,033          & 5,905          & 5,777          & 5,649\\  
+   Adjusted R$^2$                                             & 0.96916       & 0.96968        & 0.97021        & 0.97068        & 0.97101\\  
+   \midrule \midrule
+   \multicolumn{6}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{6}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+
+
+\begingroup
+\centering
+\begin{tabular}{lccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{5}{c}{ln\_tfp}\\
+   Model:                                                     & (1)            & (2)                     & (3)            & (4)                     & (5)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots $\times$ period $=$ Post-1990         & -1.540$^{*}$   &                         &                &                         & -1.540$^{*}$\\   
+                                                              & (0.8506)       &                         &                &                         & (0.8506)\\   
+   maxwind\_sqkm\_knots $\times$ period $=$ Pre-1990          & -9.482$^{***}$ &                         &                &                         & -9.482$^{***}$\\   
+                                                              & (2.039)        &                         &                &                         & (2.039)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Post-1990    & -1.804$^{*}$   &                         &                &                         & -1.804$^{*}$\\   
+                                                              & (1.032)        &                         &                &                         & (1.032)\\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Pre-1990     & -6.230         &                         &                &                         & -6.230\\   
+                                                              & (4.424)        &                         &                &                         & (4.424)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Post-1990    & -1.741         &                         &                &                         & -1.741\\   
+                                                              & (1.070)        &                         &                &                         & (1.070)\\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Pre-1990     & -7.285         &                         &                &                         & -7.285\\   
+                                                              & (4.512)        &                         &                &                         & (4.512)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Post-1990    & -1.608         &                         &                &                         & -1.608\\   
+                                                              & (1.356)        &                         &                &                         & (1.356)\\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Pre-1990     & -4.070         &                         &                &                         & -4.070\\   
+                                                              & (4.663)        &                         &                &                         & (4.663)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Post-1990    & -1.440         &                         &                &                         & -1.440\\   
+                                                              & (1.084)        &                         &                &                         & (1.084)\\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Pre-1990     & 0.0314         &                         &                &                         & 0.0314\\   
+                                                              & (5.093)        &                         &                &                         & (5.093)\\   
+   maxwind\_knots $\times$ period $=$ Post-1990               &                & 0.0002$^{*}$            &                &                         &   \\   
+                                                              &                & ($9.75\times 10^{-5}$)  &                &                         &   \\   
+   maxwind\_knots $\times$ period $=$ Pre-1990                &                & -0.0002                 &                &                         &   \\   
+                                                              &                & (0.0002)                &                &                         &   \\   
+   l(maxwind\_knots,1) $\times$ period $=$ Post-1990          &                & 0.0002$^{*}$            &                &                         &   \\   
+                                                              &                & ($9.89\times 10^{-5}$)  &                &                         &   \\   
+   l(maxwind\_knots,1) $\times$ period $=$ Pre-1990           &                & -0.0002                 &                &                         &   \\   
+                                                              &                & (0.0002)                &                &                         &   \\   
+   l(maxwind\_knots,2) $\times$ period $=$ Post-1990          &                & 0.0001                  &                &                         &   \\   
+                                                              &                & (0.0001)                &                &                         &   \\   
+   l(maxwind\_knots,2) $\times$ period $=$ Pre-1990           &                & -0.0004$^{**}$          &                &                         &   \\   
+                                                              &                & (0.0002)                &                &                         &   \\   
+   l(maxwind\_knots,3) $\times$ period $=$ Post-1990          &                & $-1.73\times 10^{-5}$   &                &                         &   \\   
+                                                              &                & (0.0001)                &                &                         &   \\   
+   l(maxwind\_knots,3) $\times$ period $=$ Pre-1990           &                & $5.06\times 10^{-5}$    &                &                         &   \\   
+                                                              &                & (0.0002)                &                &                         &   \\   
+   l(maxwind\_knots,4) $\times$ period $=$ Post-1990          &                & $1.53\times 10^{-5}$    &                &                         &   \\   
+                                                              &                & (0.0001)                &                &                         &   \\   
+   l(maxwind\_knots,4) $\times$ period $=$ Pre-1990           &                & 0.0002                  &                &                         &   \\   
+                                                              &                & (0.0002)                &                &                         &   \\   
+   nlands\_sqkm $\times$ period $=$ Post-1990                 &                &                         & -40.62$^{**}$  &                         &   \\   
+                                                              &                &                         & (17.74)        &                         &   \\   
+   nlands\_sqkm $\times$ period $=$ Pre-1990                  &                &                         & -356.6$^{***}$ &                         &   \\   
+                                                              &                &                         & (133.0)        &                         &   \\   
+   l(nlands\_sqkm,1) $\times$ period $=$ Post-1990            &                &                         & -47.12$^{**}$  &                         &   \\   
+                                                              &                &                         & (21.56)        &                         &   \\   
+   l(nlands\_sqkm,1) $\times$ period $=$ Pre-1990             &                &                         & -280.3$^{**}$  &                         &   \\   
+                                                              &                &                         & (130.1)        &                         &   \\   
+   l(nlands\_sqkm,2) $\times$ period $=$ Post-1990            &                &                         & -44.78$^{**}$  &                         &   \\   
+                                                              &                &                         & (22.08)        &                         &   \\   
+   l(nlands\_sqkm,2) $\times$ period $=$ Pre-1990             &                &                         & -279.8$^{**}$  &                         &   \\   
+                                                              &                &                         & (139.3)        &                         &   \\   
+   l(nlands\_sqkm,3) $\times$ period $=$ Post-1990            &                &                         & -40.12         &                         &   \\   
+                                                              &                &                         & (30.14)        &                         &   \\   
+   l(nlands\_sqkm,3) $\times$ period $=$ Pre-1990             &                &                         & -181.6         &                         &   \\   
+                                                              &                &                         & (125.8)        &                         &   \\   
+   l(nlands\_sqkm,4) $\times$ period $=$ Post-1990            &                &                         & -39.79$^{*}$   &                         &   \\   
+                                                              &                &                         & (23.99)        &                         &   \\   
+   l(nlands\_sqkm,4) $\times$ period $=$ Pre-1990             &                &                         & -10.53         &                         &   \\   
+                                                              &                &                         & (134.5)        &                         &   \\   
+   maxwind\_knots                                             &                &                         &                & $4.32\times 10^{-5}$    &   \\   
+                                                              &                &                         &                & ($9.57\times 10^{-5}$)  &   \\   
+   l(maxwind\_knots,1)                                        &                &                         &                & $3.65\times 10^{-5}$    &   \\   
+                                                              &                &                         &                & ($9.23\times 10^{-5}$)  &   \\   
+   l(maxwind\_knots,2)                                        &                &                         &                & $-5.44\times 10^{-5}$   &   \\   
+                                                              &                &                         &                & (0.0001)                &   \\   
+   l(maxwind\_knots,3)                                        &                &                         &                & $1.05\times 10^{-5}$    &   \\   
+                                                              &                &                         &                & (0.0001)                &   \\   
+   l(maxwind\_knots,4)                                        &                &                         &                & $8.07\times 10^{-5}$    &   \\   
+                                                              &                &                         &                & (0.0001)                &   \\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                                                       & Yes            & Yes                     & Yes            & Yes                     & Yes\\  
+   countrycode                                                & Yes            & Yes                     & Yes            & Yes                     & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)                                         & Yes            & Yes                     & Yes            & Yes                     & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                                               & 5,649          & 5,649                   & 5,649          & 5,649                   & 5,649\\  
+   Adjusted R$^2$                                             & 0.97101        & 0.97104                 & 0.97101        & 0.97098                 & 0.97101\\  
+   \midrule \midrule
+   \multicolumn{6}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{6}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+
+
+\begingroup
+\centering
+\begin{tabular}{lccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{3}{c}{ln\_tfp}\\
+   Model:                                                     & (1)            & (2)                     & (3)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots $\times$ period $=$ Post-1990         & -1.540$^{*}$   &                         &   \\   
+                                                              & (0.8506)       &                         &   \\   
+   maxwind\_sqkm\_knots $\times$ period $=$ Pre-1990          & -9.482$^{***}$ &                         &   \\   
+                                                              & (2.039)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Post-1990    & -1.804$^{*}$   &                         &   \\   
+                                                              & (1.032)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,1) $\times$ period $=$ Pre-1990     & -6.230         &                         &   \\   
+                                                              & (4.424)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Post-1990    & -1.741         &                         &   \\   
+                                                              & (1.070)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,2) $\times$ period $=$ Pre-1990     & -7.285         &                         &   \\   
+                                                              & (4.512)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Post-1990    & -1.608         &                         &   \\   
+                                                              & (1.356)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,3) $\times$ period $=$ Pre-1990     & -4.070         &                         &   \\   
+                                                              & (4.663)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Post-1990    & -1.440         &                         &   \\   
+                                                              & (1.084)        &                         &   \\   
+   l(maxwind\_sqkm\_knots,4) $\times$ period $=$ Pre-1990     & 0.0314         &                         &   \\   
+                                                              & (5.093)        &                         &   \\   
+   maxwind\_knots $\times$ period $=$ Post-1990               &                & 0.0002$^{*}$            &   \\   
+                                                              &                & ($9.75\times 10^{-5}$)  &   \\   
+   maxwind\_knots $\times$ period $=$ Pre-1990                &                & -0.0002                 &   \\   
+                                                              &                & (0.0002)                &   \\   
+   l(maxwind\_knots,1) $\times$ period $=$ Post-1990          &                & 0.0002$^{*}$            &   \\   
+                                                              &                & ($9.89\times 10^{-5}$)  &   \\   
+   l(maxwind\_knots,1) $\times$ period $=$ Pre-1990           &                & -0.0002                 &   \\   
+                                                              &                & (0.0002)                &   \\   
+   l(maxwind\_knots,2) $\times$ period $=$ Post-1990          &                & 0.0001                  &   \\   
+                                                              &                & (0.0001)                &   \\   
+   l(maxwind\_knots,2) $\times$ period $=$ Pre-1990           &                & -0.0004$^{**}$          &   \\   
+                                                              &                & (0.0002)                &   \\   
+   l(maxwind\_knots,3) $\times$ period $=$ Post-1990          &                & $-1.73\times 10^{-5}$   &   \\   
+                                                              &                & (0.0001)                &   \\   
+   l(maxwind\_knots,3) $\times$ period $=$ Pre-1990           &                & $5.06\times 10^{-5}$    &   \\   
+                                                              &                & (0.0002)                &   \\   
+   l(maxwind\_knots,4) $\times$ period $=$ Post-1990          &                & $1.53\times 10^{-5}$    &   \\   
+                                                              &                & (0.0001)                &   \\   
+   l(maxwind\_knots,4) $\times$ period $=$ Pre-1990           &                & 0.0002                  &   \\   
+                                                              &                & (0.0002)                &   \\   
+   nlands\_sqkm $\times$ period $=$ Post-1990                 &                &                         & -40.62$^{**}$\\   
+                                                              &                &                         & (17.74)\\   
+   nlands\_sqkm $\times$ period $=$ Pre-1990                  &                &                         & -356.6$^{***}$\\   
+                                                              &                &                         & (133.0)\\   
+   l(nlands\_sqkm,1) $\times$ period $=$ Post-1990            &                &                         & -47.12$^{**}$\\   
+                                                              &                &                         & (21.56)\\   
+   l(nlands\_sqkm,1) $\times$ period $=$ Pre-1990             &                &                         & -280.3$^{**}$\\   
+                                                              &                &                         & (130.1)\\   
+   l(nlands\_sqkm,2) $\times$ period $=$ Post-1990            &                &                         & -44.78$^{**}$\\   
+                                                              &                &                         & (22.08)\\   
+   l(nlands\_sqkm,2) $\times$ period $=$ Pre-1990             &                &                         & -279.8$^{**}$\\   
+                                                              &                &                         & (139.3)\\   
+   l(nlands\_sqkm,3) $\times$ period $=$ Post-1990            &                &                         & -40.12\\   
+                                                              &                &                         & (30.14)\\   
+   l(nlands\_sqkm,3) $\times$ period $=$ Pre-1990             &                &                         & -181.6\\   
+                                                              &                &                         & (125.8)\\   
+   l(nlands\_sqkm,4) $\times$ period $=$ Post-1990            &                &                         & -39.79$^{*}$\\   
+                                                              &                &                         & (23.99)\\   
+   l(nlands\_sqkm,4) $\times$ period $=$ Pre-1990             &                &                         & -10.53\\   
+                                                              &                &                         & (134.5)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                                                       & Yes            & Yes                     & Yes\\  
+   countrycode                                                & Yes            & Yes                     & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)                                         & Yes            & Yes                     & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                                               & 5,649          & 5,649                   & 5,649\\  
+   Adjusted R$^2$                                             & 0.97101        & 0.97104                 & 0.97101\\  
+   \midrule \midrule
+   \multicolumn{4}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+

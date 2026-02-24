@@ -1,0 +1,37 @@
+
+\begingroup
+\centering
+\begin{tabular}{lccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{5}{c}{ln\_tfp}\\
+   Model:                      & (1)         & (2)          & (3)          & (4)         & (5)\\  
+   \midrule
+   \emph{Variables}\\
+   maxwind\_sqkm\_knots        & -1.51$^{*}$ & -1.69$^{*}$  & -1.99$^{*}$  & -2.12$^{*}$ & -2.07$^{*}$\\   
+                               & (0.880)     & (0.973)      & (1.14)       & (1.24)      & (1.18)\\   
+   l(maxwind\_sqkm\_knots,1)   &             & -1.59$^{**}$ & -1.88$^{**}$ & -2.03$^{*}$ & -2.13$^{*}$\\   
+                               &             & (0.750)      & (0.913)      & (1.04)      & (1.11)\\   
+   l(maxwind\_sqkm\_knots,2)   &             &              & -1.93$^{*}$  & -2.07$^{*}$ & -2.16$^{*}$\\   
+                               &             &              & (1.03)       & (1.16)      & (1.23)\\   
+   l(maxwind\_sqkm\_knots,3)   &             &              &              & -1.72       & -1.84\\   
+                               &             &              &              & (1.16)      & (1.25)\\   
+   l(maxwind\_sqkm\_knots,4)   &             &              &              &             & -1.49$^{*}$\\   
+                               &             &              &              &             & (0.892)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                        & Yes         & Yes          & Yes          & Yes         & Yes\\  
+   countrycode                 & Yes         & Yes          & Yes          & Yes         & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)          & Yes         & Yes          & Yes          & Yes         & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                & 6,161       & 6,033        & 5,905        & 5,777       & 5,649\\  
+   Adjusted R$^2$              & 0.96916     & 0.96968      & 0.97021      & 0.97068     & 0.97102\\  
+   \midrule \midrule
+   \multicolumn{6}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{6}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+

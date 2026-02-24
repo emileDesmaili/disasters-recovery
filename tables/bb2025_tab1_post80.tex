@@ -1,0 +1,43 @@
+
+\begingroup
+\centering
+\begin{tabular}{lcccccc}
+   \tabularnewline \midrule \midrule
+   Dependent Variable: & \multicolumn{6}{c}{gdp\_diff}\\
+   Model:                                           & (1)         & (2)                    & (3)            & (4)         & (5)                    & (6)\\  
+   \midrule
+   \emph{Variables}\\
+   Landfalls (sqkm)                                 & 3.74$^{**}$ & 16.8                   & -19.4          &             &                        &   \\   
+                                                    & (1.80)      & (11.1)                 & (33.6)         &             &                        &   \\   
+   Domestic Credit                                  &             & $-8.97\times 10^{-5}$  &                &             & $-8.97\times 10^{-5}$  &   \\   
+                                                    &             & ($7.8\times 10^{-5}$)  &                &             & ($7.8\times 10^{-5}$)  &   \\   
+   Landfalls (sqkm) $\times$ Domestic Credit        &             & -0.223                 &                &             &                        &   \\   
+                                                    &             & (0.181)                &                &             &                        &   \\   
+   Lagged GDP per Capita                            &             &                        & -0.103$^{***}$ &             &                        & -0.103$^{***}$\\   
+                                                    &             &                        & (0.013)        &             &                        & (0.013)\\   
+   Landfalls (sqkm) $\times$ Lagged GDP per Capita  &             &                        & 1.96           &             &                        &   \\   
+                                                    &             &                        & (3.31)         &             &                        &   \\   
+   Max Wind (sqkm)                                  &             &                        &                & 0.059$^{*}$ & 0.519$^{**}$           & -2.70\\   
+                                                    &             &                        &                & (0.035)     & (0.200)                & (2.06)\\   
+   Max Wind (sqkm) $\times$ Domestic Credit         &             &                        &                &             & -0.007$^{**}$          &   \\   
+                                                    &             &                        &                &             & (0.003)                &   \\   
+   Max Wind (sqkm) $\times$ Lagged GDP per Capita   &             &                        &                &             &                        & 0.274\\   
+                                                    &             &                        &                &             &                        & (0.207)\\   
+   \midrule
+   \emph{Fixed-effects}\\
+   year                                             & Yes         & Yes                    & Yes            & Yes         & Yes                    & Yes\\  
+   countrycode                                      & Yes         & Yes                    & Yes            & Yes         & Yes                    & Yes\\  
+   \midrule
+   \emph{Varying Slopes}\\
+   year (countrycode)                               & Yes         & Yes                    & Yes            & Yes         & Yes                    & Yes\\  
+   \midrule
+   \emph{Fit statistics}\\
+   Observations                                     & 6,055       & 4,809                  & 7,573          & 6,055       & 4,809                  & 7,573\\  
+   Adjusted R$^2$                                   & 0.17322     & 0.17959                & 0.20017        & 0.17319     & 0.17964                & 0.20079\\  
+   \midrule \midrule
+   \multicolumn{7}{l}{\emph{Clustered (countrycode) standard-errors in parentheses}}\\
+   \multicolumn{7}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+\end{tabular}
+\par\endgroup
+
+

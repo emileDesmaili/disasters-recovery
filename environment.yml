@@ -1,0 +1,27 @@
+name: econ-disasters
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+
+  # Core scientific stack
+  - numpy
+  - pandas
+  - scipy
+  - xarray
+  - dask
+  - netcdf4
+
+  # ML / stats
+  - scikit-learn
+  - statsmodels
+
+  # Plotting & geospatial
+  - matplotlib
+  - cartopy
+
+  # Jupyter
+  - ipykernel
+
+  # Packaging
+  - pip

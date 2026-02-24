@@ -1,0 +1,14 @@
+papers/
+
+raw_data/**
+processed_data/
+!raw_data/pwt_clean.dta
+!raw_data/ibtracs_clean.dta
+!raw_data/wdi_clean.dta
+
+#sanbox files that are .nc
+*.nc
+
+*.RData
+*.RDataTmp
+*.Rhistory

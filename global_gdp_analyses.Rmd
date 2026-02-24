@@ -1,0 +1,7226 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, warnings=FALSE, message=FALSE}
+library(tidyverse)
+library(marginaleffects)
+library(fixest)
+library(gam)
+library(splines)
+library(ggplot2)
+library(gridExtra)
+library(useful)
+library(purrr)
+library(patchwork)
+library(rms)
+library(tidycensus)
+library(tigris)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(did)
+library(haven)
+library(bea.R)
+library(lpdid)
+library(DIDmultiplegtDYN)
+library(ggpattern)
+library(countrycode)
+library(stringr)
+library(ggpattern)
+library(scales)
+library(RColorBrewer)
+library(ggpubr)
+library(splp)
+
+options(tigris_use_cache = TRUE)
+
+```
+
+
+```{r}
+source("emileRegs.R")
+```
+
+
+
+
+# Data  
+
+
+```{r}
+data <- read_stata("raw data/DATA_hurricane_mortality_temp_month_state_19302015.dta")
+data$month_year <- paste0(data$year, sprintf("%02d", data$month))
+data$month_state <- paste0(data$month, "_", data$state_abbrev)
+
+```
+
+
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+
+
+irf <- cumulative_dl(
+  data = data,
+  outcome = "dths_tot_pop",
+  main_var = "maxs",
+  controls = "tavg:as.factor(stfips) + tavg^2:as.factor(stfips) +
+    modate:as.factor(stfips) + modate^2:as.factor(stfips) + modate^3:as.factor(stfips) + modate^4:as.factor(stfips) +
+    modate^5:as.factor(stfips) + modate^6:as.factor(stfips) + modate^7:as.factor(stfips) + modate^8:as.factor(stfips) ",
+  lags = 0:240,
+  fe = "stfips + month_state ",
+  panel_id = c("stfips", "month_year"),
+  vcov_formula = "iid",
+  shock_label = "Max Wind Speed"
+)
+
+
+# --- Plot ---
+ggplot(irf, aes(x = lag, y = cumulative_effect)) +
+  geom_line(linewidth = 1.1,color=myred) +
+  #geom_point(size = 2,color=myred) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), color=NA,fill=myred,alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  theme_classic(base_size = 15) +
+  #add 0 line
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7) +
+  labs(
+    x = "Lag (negative = leads)",
+    y = "Cumulative effect of maxwind_diff"
+  )
+```
+
+
+
+```{r}
+myblue  = "#1f78b4"   # blue
+myred  = "#e31a1c"
+myyellow = "orange"  # orange
+myblack = "black"  # light blue
+mygreen = "forestgreen"  # green
+```
+
+# Data Barrage
+
+```{r}
+make_shock <- function(
+  data,
+  var,
+  p = 0.95,
+  baseline_start = 1970,
+  baseline_end   = 2014,
+  controls = NULL,
+  threshold_level = c("global", "country"),
+  scale_var = FALSE,
+  filter = NULL
+) {
+
+  threshold_level <- match.arg(threshold_level)
+
+  data <- data %>% dplyr::mutate(.row_id = dplyr::row_number(), year = as.integer(year))
+
+  if (!is.null(filter)) {
+    data_filt <- data %>% dplyr::filter(!!filter)
+    filter_suffix <- "_filter"
+  } else {
+    data_filt <- data
+    filter_suffix <- ""
+  }
+
+  rhs <- if (!is.null(controls)) paste(controls) else "1"
+
+  suffix_parts <- c()
+  if (!is.null(controls)) suffix_parts <- c(suffix_parts, controls)
+  if (threshold_level == "country") suffix_parts <- c(suffix_parts, "country")
+  if (scale_var) suffix_parts <- c(suffix_parts, "varweight")
+
+  suffix <- if (length(suffix_parts) > 0) {
+    paste0("_", paste(suffix_parts, collapse = "_"))
+  } else {
+    ""
+  }
+
+  suffix <- paste0(suffix, filter_suffix)
+
+  formula_fe <- as.formula(paste(var, "~", rhs, "| countrycode[year] + year"))
+  fe_model <- feols(formula_fe, data = data_filt)
+
+  shock_name         <- paste0(var, "_shock", suffix)
+  treat_name         <- paste0(var, "_treat", suffix)
+  treat_forever_name <- paste0(var, "_treat_forever", suffix)
+  first_treat_name   <- paste0(var, "_first_treat_year", suffix)
+  thresh_name        <- paste0(var, "_shock_p", suffix)
+
+  resid_df <- data_filt %>%
+    dplyr::select(.row_id) %>%
+    dplyr::mutate(!!shock_name := resid(fe_model))
+
+  data <- data %>%
+    dplyr::left_join(resid_df, by = ".row_id")
+
+  if (scale_var) {
+    data <- data %>%
+      dplyr::group_by(countrycode) %>%
+      dplyr::mutate(
+        !!shock_name := if_else(
+          !is.na(.data[[shock_name]]),
+          .data[[shock_name]] / sd(.data[[shock_name]], na.rm = TRUE),
+          NA_real_
+        )
+      ) %>%
+      dplyr::ungroup()
+  }
+
+  data_filt <- data %>% dplyr::filter(!is.na(.data[[shock_name]]))
+
+  if (threshold_level == "global") {
+    global_thresh <- quantile(
+      data_filt[[shock_name]][
+        data_filt$year >= baseline_start &
+        data_filt$year <= baseline_end
+      ],
+      p, na.rm = TRUE
+    )
+    data[[thresh_name]] <- global_thresh
+  } else {
+    data <- data %>%
+      dplyr::group_by(countrycode) %>%
+      dplyr::mutate(
+        !!thresh_name := quantile(
+          .data[[shock_name]][
+            !is.na(.data[[shock_name]]) &
+              .data$year >= baseline_start &
+              .data$year <= baseline_end
+          ],
+          p, na.rm = TRUE
+        )
+      ) %>%
+      dplyr::ungroup()
+  }
+
+  data <- data %>%
+    dplyr::mutate(
+      !!treat_name         := NA_integer_,
+      !!treat_forever_name := NA_integer_,
+      !!first_treat_name   := NA_real_,
+      !!thresh_name        := if_else(!is.na(.data[[shock_name]]), .data[[thresh_name]], NA_real_)
+    )
+
+  data <- data %>%
+    dplyr::group_by(countrycode) %>%
+    dplyr::mutate(
+      !!treat_name := if_else(
+        !is.na(.data[[shock_name]]) & !is.na(.data[[thresh_name]]),
+        if_else(
+          .data[[shock_name]] >= .data[[thresh_name]] & .data[[var]] > 0,
+          1L, 0L
+        ),
+        NA_integer_
+      ),
+      !!first_treat_name := if_else(
+        any(.data[[treat_name]] == 1, na.rm = TRUE),
+        min(.data$year[!is.na(.data[[treat_name]]) & .data[[treat_name]] == 1], na.rm = TRUE),
+        NA_real_
+      ),
+      !!treat_forever_name := if_else(
+        !is.na(.data[[first_treat_name]]) & .data$year >= .data[[first_treat_name]],
+        1L, 0L, missing = NA_integer_
+      )
+    ) %>%
+    dplyr::ungroup()
+
+  data$.row_id <- NULL
+
+  return(data)
+}
+```
+
+
+
+
+```{r}
+pwt <- read_stata("raw data/pwt_clean.dta")
+tcs <- read_stata("raw data/ibtracs_clean.dta")
+wdi <- read_stata("raw data/wdi_clean_2018.dta")
+data <- pwt %>% left_join(tcs, by = c("year", "countrycode")) %>%
+  left_join(wdi, by = c("year", "countrycode"))
+knot_to_ms = 0.514444
+data$energy_sqkm <- data$sum_ann_energy_i_sqkm_nob %>% replace_na(0)
+data$energy <- data$sum_ann_energy_i_nob %>% replace_na(0)
+data$maxwind_knots <- data$max_ann_wind_i_nob %>% replace_na(0)
+data$maxwind_sqkm_knots <- data$max_a_wind_i_sqkm_nob %>% replace_na(0)
+data$maxwind <- data$max_ann_wind_i_nob %>% replace_na(0) * knot_to_ms
+data$avgwind <- data$avg_ann_wind_i_nob %>% replace_na(0) * knot_to_ms
+data$nlands <- data$sum_a_lands_nob %>% replace_na(0)
+data$nlands_sqkm <- data$sum_a_lands_i_sqkm_nob %>% replace_na(0)
+data$maxwind_sqkm <- data$max_a_wind_i_sqkm_nob %>% replace_na(0) * knot_to_ms
+data %>%  arrange(countrycode, year) %>%
+  group_by(countrycode) %>%
+  mutate(
+    hc_diff = hc - lag(hc),
+    maxwind_sqkm_diff = maxwind_sqkm - lag(maxwind_sqkm),
+    maxwind_diff = maxwind - lag(maxwind),
+    nlands_diff = nlands - lag(nlands),
+    l0_maxwind_p1 = dplyr::lag(maxwind_diff, 0),
+    l0_maxwind_p2 = dplyr::lag(maxwind_diff, 0),
+    l1_maxwind_p1 = dplyr::lag(maxwind_diff, 1),
+    l1_maxwind_p2 = dplyr::lag(maxwind_diff, 1),
+    l2_maxwind_p1 = dplyr::lag(maxwind_diff, 2),
+    l2_maxwind_p2 = dplyr::lag(maxwind_diff, 2),
+    l3_maxwind_p1 = dplyr::lag(maxwind_diff, 3),
+    l3_maxwind_p2 = dplyr::lag(maxwind_diff, 3),
+    l4_maxwind_p1 = dplyr::lag(maxwind_diff, 4),
+    l4_maxwind_p2 = dplyr::lag(maxwind_diff, 4),
+    l5_maxwind_p1 = dplyr::lag(maxwind_diff, 5),
+    l5_maxwind_p2 = dplyr::lag(maxwind_diff, 5),
+    l0_nlands_p1 = dplyr::lag(nlands_diff, 0),
+    l0_nlands_p2 = dplyr::lag(nlands_diff, 0),
+    l1_nlands_p1 = dplyr::lag(nlands_diff, 1),
+    l1_nlands_p2 = dplyr::lag(nlands_diff, 1),
+    l2_nlands_p1 = dplyr::lag(nlands_diff, 2),
+    l2_nlands_p2 = dplyr::lag(nlands_diff, 2),
+    l3_nlands_p1 = dplyr::lag(nlands_diff, 3),
+    l3_nlands_p2 = dplyr::lag(nlands_diff, 3),
+    l4_nlands_p1 = dplyr::lag(nlands_diff, 4),
+    l4_nlands_p2 = dplyr::lag(nlands_diff, 4),
+    l5_nlands_p1 = dplyr::lag(nlands_diff, 5),
+    l5_nlands_p2 = dplyr::lag(nlands_diff, 5)
+    
+    ) %>% 
+  ungroup() -> data
+
+
+data$continent <- countrycode(data$countrycode,
+                                 origin = "iso3c",
+                                 destination = "continent")
+
+data_tc <- data %>%
+  mutate(
+    treat = as.integer(maxwind > 0),
+    treatstorm = as.integer(maxwind >= 34),
+    treathurricane = as.integer(maxwind >= 64),
+    #create category factors for hurricances
+    category = ifelse(maxwind < 18, "No Storm",
+                      ifelse(maxwind >= 18 & maxwind < 33, "Tropical Storm",
+                             ifelse(maxwind >= 33 & maxwind < 43, "Category 1",
+                                    ifelse(maxwind >= 43 & maxwind < 50, "Category 2",
+                                           ifelse(maxwind >= 50 & maxwind < 58, "Category 3",
+                                                  ifelse(maxwind >= 58 & maxwind < 70, "Category 4",
+                                                         "Category 5")))))),
+    categorybin = ifelse(maxwind >= 49, "Category 3-5",
+                           ifelse(maxwind >= 33 & maxwind < 49, "Category 1-2",
+                                  ifelse(maxwind >= 18 & maxwind < 33, "Tropical Storm",
+                                         "No Storm"))),
+    
+    loggdp = ln_real_gdp_usd_pc,
+    gdp = real_gdp_usd_pc,
+    gdp_diff = growth_real_gdp_usd_pc,
+    year2 = year^2,
+    year3 = year^3,
+    year4 = year^4,
+    maxwind1 = maxwind,
+    maxwind2 = maxwind^2,
+    maxwind3 = maxwind^3,
+    maxwind_diff1 = maxwind_diff,
+    maxwind_diff2 = maxwind_diff^2,
+    maxwind_diff3 = maxwind_diff^3,
+    nland_diff1 = nlands_diff,
+    nland_diff2 = nlands_diff^2,
+    nland_diff3 = nlands_diff^3,
+
+    period = ifelse(year <= 1990, "Pre-1990", "Post-1990"),
+    period90 = case_when(year <=1990 ~'Pre',
+                        year >1990 ~'Post'),
+     period91 = case_when(year <=1991 ~'Pre',
+                        year >1991 ~'Post'),
+    period89 = case_when(year <=1989 ~'Pre',
+                        year >1989 ~'Post'),
+    period92 = case_when(year <=1992 ~'Pre',
+                        year >1992 ~'Post'),
+    period88 = case_when(year <=1988 ~'Pre',
+                        year >1988 ~'Post'),
+    decade = case_when(
+      year >= 1970 & year < 1980 ~ "1970s",
+      year >= 1980 & year < 1990 ~ "1980s",
+      year >= 1990 & year < 2000 ~ "1990s",
+      year >= 2000 & year < 2010 ~ "2000s",
+      year >= 2010 & year < 2020 ~ "2010s",
+    ),
+    period3 = case_when(
+      year < 1985 ~ "1970-1984",
+      year >= 1985 & year < 2000 ~ "1985-1999",
+      year >= 2000 ~ "2000-2014"
+    )
+    
+  ) %>% filter(year>=1969)
+
+data_tc <- data_tc %>%
+  # compute country-level averages over 2000–2010
+  group_by(countrycode) %>%
+  mutate(
+    credit_avg = mean(domestic_credit[year >= 2000 & year <= 2014], na.rm = TRUE),
+    gdp_pc_avg = mean(real_gdp_usd_pc[year >= 2000 & year <= 2014], na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  # bin based on averages
+  mutate(
+    credit_bin = factor(
+      ntile(credit_avg, 3),
+      levels = 1:3,
+      labels = c("q1", "q2", "q3")
+    ),
+    gdp_pc_bin = factor(
+      ntile(gdp_pc_avg, 3),
+      levels = 1:3,
+      labels = c("bottom 1/3", "middle", "top 1/3")
+    ),
+    # create deciles for GDP per capita
+    gdp_pc_decile = ntile(gdp_pc_avg, 5),
+    gdp_pc_group = case_when(
+      gdp_pc_decile == 1 ~ "bottom 1/5",
+      gdp_pc_decile == 5 ~ "top 1/5",
+      TRUE ~ "middle"
+    )
+  )
+
+######### SHOCKs
+
+data_tc <- data_tc %>%
+  #group_by(countrycode) %>%
+  
+  # Compute country-specific 95th percentiles over 1970-1990
+  mutate(
+    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    nlands_p95  = quantile(nlands[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    energy_p95  = quantile(energy[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    
+    maxwind_sqkm_p95 = quantile(maxwind_sqkm[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    nlands_sqkm_p95  = quantile(nlands_sqkm[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    energy_sqkm_p95  = quantile(energy_sqkm[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    maxwind_p90 = quantile(maxwind[year >= 1970 & year <= 2014], 0.90, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  
+  # Build indicators, but only assign 1 if percentile > 0
+  mutate(
+    maxwind_95      = as.integer(maxwind_p95 > 0 & maxwind      >= maxwind_p95),
+    nlands_95       = as.integer(nlands_p95  > 0 & nlands       >= nlands_p95),
+    energy_95       = as.integer(energy_p95  > 0 & energy       >= energy_p95),
+    maxwind_sqkm_95 = as.integer(maxwind_sqkm_p95 > 0 & maxwind_sqkm >= maxwind_sqkm_p95),
+    nlands_sqkm_95  = as.integer(nlands_sqkm_p95  > 0 & nlands_sqkm  >= nlands_sqkm_p95),
+    energy_sqkm_95  = as.integer(energy_sqkm_p95  > 0 & energy_sqkm  >= energy_sqkm_p95),
+    maxwind_90      = as.integer(maxwind_p90 > 0 & maxwind >= maxwind_p90),
+    # Physical thresholds
+    wind_10ms = as.integer(maxwind >= 10),
+    wind_21ms = as.integer(maxwind >= 21),
+    wind_ts = as.integer(maxwind >= 18),
+    wind_cat1 = as.integer(maxwind >= 33),
+    wind_cat2 = as.integer(maxwind >= 43),
+    wind_cat3 = as.integer(maxwind >= 50)
+  )
+
+
+
+
+data_tc <- data_tc %>%
+  make_shock("maxwind") %>%
+  make_shock("maxwind", scale_var = TRUE) %>%
+  make_shock("maxwind", threshold_level = "country") %>%
+  make_shock("maxwind_sqkm") %>%
+  make_shock("maxwind_sqkm", scale_var = TRUE) %>%
+  make_shock("maxwind_sqkm", threshold_level = "country") %>%
+  make_shock("energy") %>%
+  make_shock("energy_sqkm") %>%
+  make_shock("nlands") %>%
+  make_shock("nlands_sqkm") %>% 
+  make_shock("maxwind", filter = rlang::expr(year >= 1979)) %>% 
+  make_shock("maxwind", filter = rlang::expr(year >= 1979), scale_var = TRUE) %>% 
+  make_shock("maxwind", filter = rlang::expr(year >= 1979), threshold_level = "country") %>%
+  make_shock("maxwind_sqkm", filter = rlang::expr(year >= 1979)) 
+
+
+
+
+
+# add tfp
+alpha <- 0.33
+data_tc <- data_tc %>%
+  mutate(
+    ln_hc          = log(hc),
+    ln_rkna        = log(rkna),
+    ln_pop         = log(pop),
+    ln_real_gdp_usd = log(real_gdp_usd),
+    ln_tfp  = ln_real_gdp_usd - (alpha * ln_rkna) - (1 - alpha) * (ln_hc + ln_pop)
+  )
+
+data_tc <- data_tc %>%
+  group_by(countrycode) %>%
+  arrange(year) %>%
+  mutate(
+    maxwind_treat_past3 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-3):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past5 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-5):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past2 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-2):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past7 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-7):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past10 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-10):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past15 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-15):(i-1)] == 1)
+    }) %>% as.integer(),
+    maxwind_treat_past20 = sapply(seq_along(year), function(i) {
+      any(maxwind_treat[max(1, i-20):(i-1)] == 1)
+    }) %>% as.integer()
+    
+  ) %>%
+  ungroup()
+
+
+data_tc <- data_tc %>%
+  arrange(countrycode, year) %>%
+  group_by(countrycode) %>%
+  mutate(
+    prev_treat_year = ifelse(maxwind_treat == 1, year, NA_integer_),
+    prev_treat_year = zoo::na.locf(prev_treat_year, na.rm = FALSE),
+    prev_treat_year = lag(prev_treat_year),   # force "previous", not current
+    time_to_last = ifelse(
+      maxwind_treat == 1 & !is.na(prev_treat_year),
+      year - prev_treat_year,
+      0L),
+    ttl_bin = case_when(
+      time_to_last == 0 ~ "No past shock",
+      time_to_last > 0 & time_to_last <= 3 ~ "1-3",
+      time_to_last > 3 & time_to_last <= 5 ~ "3-5",
+      time_to_last > 5 & time_to_last <= 7 ~ "5-7",
+      time_to_last > 7 & time_to_last <= 10 ~ "7-10",
+      time_to_last > 10 & time_to_last <= 15 ~ "10-15",
+       time_to_last > 15 & time_to_last <= 20 ~ "15-20",
+      time_to_last > 20 ~ "20+"
+    ),
+      ttl_bin2 = case_when(
+      time_to_last == 0 ~ "No past shock",
+      time_to_last > 0 & time_to_last <= 5 ~ "1-5",
+      time_to_last > 5 & time_to_last <= 10 ~ "5-10",
+      time_to_last > 10 & time_to_last <= 15 ~ "10-15",
+       time_to_last > 15 & time_to_last <= 20 ~ "15-20",
+      time_to_last > 20 ~ "20+"
+     ),
+      ttl_bin3 = case_when(
+      time_to_last == 0 ~ "No past shock",
+      time_to_last > 0 & time_to_last <= 5 ~ "1-5",
+      time_to_last > 5 & time_to_last <= 10 ~ "5-10",
+      time_to_last > 10 ~ "10+"
+     ),
+    ttl_bin5 = case_when(
+      time_to_last == 0 ~ "No past shock",
+      time_to_last > 0 & time_to_last <= 5 ~ "1-5",
+      time_to_last > 5 & time_to_last <= 10 ~ "5-10",
+      time_to_last > 10 & time_to_last <= 15 ~ "10-15",
+       time_to_last > 15 & time_to_last <= 20 ~ "15-20",
+      time_to_last > 20 & time_to_last <= 25 ~ "20-25",
+      time_to_last > 25 ~ "25+"
+     )
+  ) %>%
+  ungroup()
+
+```
+
+# B&B2025 replication
+
+```{r}
+m1 <- feols(
+  gdp_diff ~ nlands_sqkm| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m2 <- feols(
+  gdp_diff ~ nlands_sqkm*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  gdp_diff ~ nlands_sqkm*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+m4 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m6 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2,m3, m4, m5, m6, replace=TRUE,
+       digits=3, dict = c("nlands_sqkm" = "Landfalls (sqkm)",
+                "maxwind_sqkm_knots" = "Max Wind (sqkm)",
+                "domestic_credit" = "Domestic Credit",
+                "l(ln_real_gdp_usd_pc,1)" = "Lagged GDP per Capita"),
+       fitstat = c("n", "ar2"), tex = TRUE, file = "tables/bb2025_replication_tab1.tex")
+etable(m1, m2,m3, m4, m5, m6,
+       fitstat = c("n", "ar2"))
+
+```
+
+```{r}
+m1 <- feols(
+  gdp_diff*100 ~ l(maxwind_shock,0:5)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  gdp_diff*100 ~ l(maxwind_shock_filter,0:5)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2)
+```
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+years <- sort(unique(data_tc$year))
+
+vars <- c("nlands_sqkm", 
+          "maxwind_sqkm",
+          "nlands", "maxwind",
+          "maxwind_sqkm_treat", "maxwind_treat",
+          "maxwind_shock", "maxwind_shock_filter")
+
+run_loyo <- function(varname) {
+  
+  formula_full <- as.formula(
+    paste0("gdp_diff ~ ", varname, 
+           " | year + countrycode[year]")
+  )
+  
+  # Full sample model
+  m_full <- feols(
+    formula_full,
+    data = data_tc,
+    panel.id = c("countrycode", "year"),
+    cluster = ~countrycode
+  )
+  
+  full_beta <- coef(m_full)[varname]
+  full_se   <- se(m_full)[varname]
+  
+  full_ci_low  <- full_beta - 1.96 * full_se
+  full_ci_high <- full_beta + 1.96 * full_se
+  
+  # LOYO coefficients only
+  loyo <- map_dfr(years, function(y_drop) {
+    
+    m <- feols(
+      formula_full,
+      data = data_tc %>% filter(year != y_drop),
+      panel.id = c("countrycode", "year"),
+      cluster = ~countrycode
+    )
+    
+    tibble(
+      variable = varname,
+      dropped_year = y_drop,
+      beta = coef(m)[varname]
+    )
+  })
+  
+  # Add constant full-sample info
+  loyo %>%
+    mutate(
+      full_beta = full_beta,
+      full_ci_low = full_ci_low,
+      full_ci_high = full_ci_high
+    )
+}
+
+loyo_results <- map_dfr(vars, run_loyo)
+loyo_results <- loyo_results %>%
+  mutate(
+    within_ci = beta >= full_ci_low & beta <= full_ci_high
+  )
+
+
+ggplot(loyo_results, 
+       aes(x = dropped_year, y = beta)) +
+  
+  geom_ribbon(aes(ymin = full_ci_low, ymax = full_ci_high),
+              alpha = 0.2) +
+  
+  geom_line() +
+  geom_point(size = 1.8) +
+  
+  geom_hline(aes(yintercept = full_beta),
+             linetype = "dashed", 
+             color = "red") +
+  
+  facet_wrap(~ variable, scales = "free_y") +
+  
+  theme_classic(base_size = 14) +
+  #add dash at 1980
+  geom_vline(xintercept = 1980, linetype = "dashed", color = "blue") +
+  
+  labs(
+    title = "Leave-One-Year-Out Sensitivity",
+    x = "Dropped Year",
+    y = "Coefficient"
+  )
+ggsave("figures/bb_detective/loyo_sensitivity.png", width = 8, height = 5)
+
+```
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+vars <- c("nlands_sqkm", 
+          "maxwind_sqkm",
+          "nlands", "maxwind",
+          "maxwind_sqkm_treat", "maxwind_treat",
+          "maxwind_shock", "maxwind_shock_filter",
+          "maxwind_treat_varweight", "maxwind_treat_country")
+
+run_loco <- function(varname) {
+  
+  formula_full <- as.formula(
+    paste0("gdp_diff ~ ", varname, 
+           " | year + countrycode[year]")
+  )
+  
+  # ----- Full sample model -----
+  m_full <- feols(
+    formula_full,
+    data = data_tc,
+    panel.id = c("countrycode", "year"),
+    cluster = ~countrycode
+  )
+  
+  full_beta <- coef(m_full)[varname]
+  full_se   <- se(m_full)[varname]
+  
+  full_ci_low  <- full_beta - 1.96 * full_se
+  full_ci_high <- full_beta + 1.96 * full_se
+  
+  # ----- Leave-one-country-out -----
+  loco <- map_dfr(countries, function(cc_drop) {
+    
+    m <- feols(
+      formula_full,
+      data = data_tc %>% filter(countrycode != cc_drop),
+      panel.id = c("countrycode", "year"),
+      cluster = ~countrycode
+    )
+    
+    tibble(
+      variable = varname,
+      dropped_country = cc_drop,
+      beta = coef(m)[varname]
+    )
+  })
+  
+  loco %>%
+    mutate(
+      full_beta = full_beta,
+      full_ci_low = full_ci_low,
+      full_ci_high = full_ci_high
+    )
+}
+
+countries <- unique(data_tc$countrycode)
+loco_results <- map_dfr(vars, run_loco)
+#add if beta is within full ci
+loco_results <- loco_results %>%
+  mutate(
+    within_ci = beta >= full_ci_low & beta <= full_ci_high
+  )
+
+ggplot(loco_results, 
+       aes(x = dropped_country, y = beta)) +
+  
+  geom_ribbon(aes(ymin = full_ci_low, ymax = full_ci_high),
+              alpha = 0.2) +
+  
+  geom_line() +
+  geom_point(size = 1.8) +
+  
+  geom_hline(aes(yintercept = full_beta),
+             linetype = "dashed", 
+             color = "red") +
+  
+  facet_wrap(~ variable, scales = "free_y",ncol=5) +
+  
+  theme_classic(base_size = 14) +
+  
+  labs(
+    title = "Leave-One-Country-Out Sensitivity",
+    x = "Dropped Country",
+    y = "Coefficient"
+  )
+
+ggsave("figures/bb_detective/loco_sensitivity.png",  dpi=300)
+```
+
+
+
+```{r}
+m1 <- feols(
+  gdp_diff ~ nlands_sqkm| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+m2 <- feols(
+  gdp_diff ~ nlands_sqkm*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  gdp_diff ~ nlands_sqkm*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+m4 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m6 <- feols(
+  gdp_diff ~ maxwind_sqkm_knots*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2,m3, m4, m5, m6, replace=TRUE,
+       digits=3, dict = c("nlands_sqkm" = "Landfalls (sqkm)",
+                "maxwind_sqkm_knots" = "Max Wind (sqkm)",
+                "domestic_credit" = "Domestic Credit",
+                "l(ln_real_gdp_usd_pc,1)" = "Lagged GDP per Capita"),
+       fitstat = c("n", "ar2"), tex = TRUE, file = "tables/bb2025_tab1_post80.tex")
+etable(m1, m2,m3, m4, m5, m6,
+       fitstat = c("n", "ar2"))
+
+```
+
+
+
+
+
+```{r}
+m1 <- feols(
+  gdp_diff ~ i(period,nlands_sqkm)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m2 <- feols(
+  gdp_diff ~ i(period,nlands_sqkm)*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  gdp_diff ~ i(period,nlands_sqkm)*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+m4 <- feols(
+  gdp_diff ~ i(period,maxwind_sqkm_knots)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  gdp_diff ~ i(period,maxwind_sqkm_knots)*domestic_credit| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m6 <- feols(
+  gdp_diff ~ i(period,maxwind_sqkm_knots)*l(ln_real_gdp_usd_pc,1)| year + countrycode[year],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2,m3, m4, m5, m6,
+       dict = c("i(period,nlands_sqkm)" = "Landfalls (sqkm) × Period",
+                "i(period,maxwind_sqkm_knots)" = "Max Wind (sqkm) × Period",
+                "nlands_sqkm" = "Landfalls (sqkm)",
+                "maxwind_sqkm_knots" = "Max Wind (sqkm)"),
+       
+       fitstat = c("n", "ar2"), tex = TRUE, file = "tables/bb2025_extensiontab1.tex")
+etable(m1, m2,m3, m4, m5, m6,
+       fitstat = c("n", "ar2"))
+
+```
+
+```{r}
+m1 <- feols(
+  ln_tfp ~ maxwind_sqkm_knots| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:1)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:2)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m4 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:3)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"), tex = TRUE, digits = 3, replace=TRUE,
+       file = "tables/bb2025_tab2.tex")
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"))
+```
+
+
+```{r}
+m1 <- feols(
+  ln_tfp ~ maxwind_sqkm_knots| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:1)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:2)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+m4 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:3)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"), tex = TRUE, digits = 3, replace=TRUE,
+       file = "tables/bb2025_tab2_post80.tex")
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"))
+```
+
+
+
+
+```{r}
+m1 <- feols(
+  ln_tfp ~ i(period,maxwind_sqkm_knots)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:1):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:2):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m4 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:3):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m5 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:4):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"), tex = TRUE, file = "tables/bb2025_tab2_extension.tex")
+
+etable(m1, m2, m3,m4,m5,
+       fitstat = c("n", "ar2"))
+```
+
+```{r}
+m1 <- feols(
+  ln_tfp ~ l(maxwind_sqkm_knots,0:4):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  ln_tfp ~ l(maxwind_knots,0:4):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+m3 <- feols(
+  ln_tfp ~ l(nlands_sqkm,0:4):i(period)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2, m3,
+       fitstat = c("n", "ar2"), tex = TRUE, file = "tables/bb2025_tab2_extension_2.tex")
+
+etable(m1, m2, m3,
+       fitstat = c("n", "ar2"))
+```
+
+```{r}
+m1 <- feols(
+  gdp_diff*100 ~ l(maxwind,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  gdp_diff*100 ~ l(maxwind,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m3 <- feols(
+  gdp_diff ~ l(maxwind_sqkm,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m4 <- feols(
+  gdp_diff ~ l(maxwind_sqkm,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+m5 <- feols(
+  gdp_diff ~ l(nlands_sqkm,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1969),
+  panel.id = c("countrycode", "year")
+)
+
+m6 <- feols(
+  gdp_diff ~ l(nlands_sqkm,0:4)| year + countrycode[year],
+  data = data_tc %>% filter(year>1979),
+  panel.id = c("countrycode", "year")
+)
+
+        file = "tables/bb2025_.tex")
+
+etable(m1, m2, m3,m4,m5,m6,
+       fitstat = c("n", "ar2"))
+```
+
+```{r}
+models <- list(
+  m1 = m1, m2 = m2,
+  m3 = m3, m4 = m4,
+  m5 = m5, m6 = m6
+)
+
+coefplot(list(m1,m2))
+
+legend("topright",lty=1:2,col=1:2,
+       legend = c("1970-2014", "1980-2014"))
+
+coefplot(list(m3,m4))
+legend("topright",lty=1:2,col=1:2,
+       legend = c("1970-2014", "1980-2014"))
+
+coefplot(list(m5,m6))
+legend("topright",lty=1:2,col=1:2,
+       legend = c("1970-2014", "1980-2014"))
+```
+
+
+# DIAGNOSTICS
+
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+years  <- sort(unique(data_tc$year))
+
+shocks <- c("maxwind_shock", "maxwind_shock_filter", 
+            "maxwind_treat", "maxwind_treat_filter",
+            "maxwind_sqkm", "maxwind_sqkm_shock_filter")
+irfs_loyo <- map_dfr(years, function(y) {
+  
+  data_loo <- data_tc %>% filter(year != y)
+  
+  map_dfr(shocks, function(shk) {
+    
+    lp_panel(
+      data        = data_loo,
+      outcome     = "loggdp",
+      main_var    = shk,
+      horizon     = 10,
+      controls    = "l(gdp_diff,1:2)",
+      fe          = "countrycode[year] + countrycode[year2] + year",
+      panel_id    = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(
+        shock   = shk,
+        loo_year = y
+      )
+  })
+})
+
+#add main sample estimate
+irfs_full <- map_dfr(shocks, function(shk) {
+  lp_panel(
+    data        = data_tc,
+    outcome     = "loggdp",
+    main_var    = shk,
+    horizon     = 10,
+    controls    = "l(gdp_diff,1:2)",
+    fe          = "countrycode[year] + countrycode[year2] + year",
+    panel_id    = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(
+      shock   = shk,
+      loo_year = "Full Sample"
+    )
+})
+
+#rename _filter to _post80 for better labels
+irfs_loyo <- irfs_loyo %>%
+  mutate(
+    shock = case_when(
+      shock == "maxwind_shock_filter" ~ "maxwind_shock_post80",
+      shock == "maxwind_treat_filter" ~ "maxwind_treat_post80",
+      shock == "maxwind_sqkm_shock_filter" ~ "maxwind_sqkm_shock_post80",
+      TRUE ~ shock
+    ))
+#same for full sample
+irfs_full <- irfs_full %>%
+  mutate(
+    shock = case_when(
+      shock == "maxwind_shock_filter" ~ "maxwind_shock_post80",
+      shock == "maxwind_treat_filter" ~ "maxwind_treat_post80",
+      shock == "maxwind_sqkm_shock_filter" ~ "maxwind_sqkm_shock_post80",
+      TRUE ~ shock
+    ))
+
+ggplot(irfs_loyo, aes(horizon, irf_mean, group = loo_year)) +
+  geom_line(alpha = 0.15) +
+  geom_line(data = irfs_full, aes(horizon, irf_mean), color = "cornflowerblue", linewidth = 1) +
+  geom_ribbon(data = irfs_full, aes(ymin = irf_down, ymax = irf_up), fill = "cornflowerblue", alpha = 0.15) +
+  facet_wrap(~ shock, scales = "free_y") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    x = "Horizon",
+    y = "IRF",
+    title = "Leave-One-Year-Out"
+  ) +
+  theme_classic() +
+scale_y_continuous(labels = scales::percent_format(accuracy = 0.01))
+ggsave("figures/bb_detective/loyo_irfs.png", dpi=300)
+```
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+countries  <- sort(unique(data_tc$countrycode))
+shocks <- c("maxwind_shock", "maxwind_shock_filter", 
+            "maxwind_treat", "maxwind_treat_filter",
+            "maxwind_sqkm", "maxwind_sqkm_shock_filter")
+irfs_loco <- map_dfr(countries, function(cc) {
+  
+  data_loco <- data_tc %>% filter(countrycode != cc)
+  
+  map_dfr(shocks, function(shk) {
+    
+    lp_panel(
+      data        = data_loco,
+      outcome     = "loggdp",
+      main_var    = shk,
+      horizon     = 10,
+      controls    = "l(gdp_diff,1:2)",
+      fe          = "countrycode[year] + countrycode[year2] + year",
+      panel_id    = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(
+        shock   = shk,
+        loco_country = cc
+      )
+  })
+})
+
+
+#add main sample estimate
+irfs_full <- map_dfr(shocks, function(shk) {
+  lp_panel(
+    data        = data_tc,
+    outcome     = "loggdp",
+    main_var    = shk,
+    horizon     = 10,
+    controls    = "l(gdp_diff,1:2)",
+    fe          = "countrycode[year] + countrycode[year2] + year",
+    panel_id    = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(
+      shock   = shk,
+      loco_country = "Full Sample")
+})
+
+irfs_loco <- irfs_loco %>%
+  mutate(
+    shock = case_when(
+      shock == "maxwind_shock_filter" ~ "maxwind_shock_post80",
+      shock == "maxwind_treat_filter" ~ "maxwind_treat_post80",
+      shock == "maxwind_sqkm_shock_filter" ~ "maxwind_sqkm_shock_post80",
+      TRUE ~ shock
+    ))
+
+irfs_full <- irfs_full %>%
+  mutate(
+    shock = case_when(
+      shock == "maxwind_shock_filter" ~ "maxwind_shock_post80",
+      shock == "maxwind_treat_filter" ~ "maxwind_treat_post80",
+      shock == "maxwind_sqkm_shock_filter" ~ "maxwind_sqkm_shock_post80",
+      TRUE ~ shock
+    ))
+
+ggplot(irfs_loco, aes(horizon, irf_mean, group = loco_country)) +
+  geom_line(alpha = 0.15) +
+  geom_line(data = irfs_full, aes(horizon, irf_mean), color = "cornflowerblue", linewidth = 1) +
+  geom_ribbon(data = irfs_full, aes(ymin = irf_down, ymax = irf_up), fill = "cornflowerblue", alpha = 0.15) +
+  facet_wrap(~ shock, scales = "free_y") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    x = "Horizon",
+    y = "IRF",
+    title = "Leave-One-Country-Out"
+  ) +
+  theme_classic() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.01))
+ggsave("figures/bb_detective/loco_irfs.png", dpi = 300)
+
+```
+
+```{r}
+#print number of countries per shock in irf_loco
+irfs_loco %>%
+  group_by(shock) %>%
+  summarise(n_countries = n_distinct(loco_country))
+
+```
+
+
+
+```{r, message=FALSE}
+data_tc <- data_tc %>%
+  mutate(
+    year_block = paste0(
+      floor((year - 1969) / 5) * 5 + 1969,
+      "-",
+      floor((year - 1969) / 5) * 5 + 1973
+    )
+  )
+
+blocks <- sort(unique(data_tc$year_block))
+
+shocks <- c(
+  "maxwind_shock", "maxwind_shock_filter",
+  "maxwind_treat", "maxwind_treat_filter"
+)
+
+irfs_lobo <- map_dfr(blocks, function(bk) {
+  
+  data_lobo <- data_tc %>% filter(year_block != bk)
+  
+  map_dfr(shocks, function(shk) {
+    
+    lp_panel(
+      data         = data_lobo,
+      outcome      = "loggdp",
+      main_var     = shk,
+      horizon      = 10,
+      controls     = "l(gdp_diff,1:2)",
+      fe           = "countrycode[year] + countrycode[year2] + year",
+      panel_id     = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(
+        shock       = shk,
+        left_block  = bk
+      )
+  })
+})
+
+#add main sample estimate
+irfs_full <- map_dfr(shocks, function(shk) {
+  lp_panel(
+    data         = data_tc,
+    outcome      = "loggdp",
+    main_var     = shk,
+    horizon      = 10,
+    controls     = "l(gdp_diff,1:2)",
+    fe           = "countrycode[year] + countrycode[year2] + year",
+    panel_id     = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(
+      shock       = shk,
+      left_block  = "Full Sample"
+    )
+})
+
+ggplot(irfs_lobo, aes(horizon, irf_mean, group = left_block)) +
+  geom_line(alpha = 0.15) +
+  
+  geom_line(
+    data = irfs_full,
+    aes(horizon, irf_mean),
+    color = "cornflowerblue",
+    linewidth = 1
+  ) +
+  
+  geom_ribbon(
+    data = irfs_full,
+    aes(ymin = irf_down, ymax = irf_up),
+    fill = "cornflowerblue",
+    alpha = 0.15
+  ) +
+  
+  facet_wrap(~ shock, scales = "free_y") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    x = "Horizon",
+    y = "IRF",
+    title = "Leave-One-5-Year-Period-Out IRFs"
+  ) +
+  theme_classic() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.01))
+```
+
+
+
+
+```{r}
+m1 <- feols(
+  f(loggdp,5) - l(loggdp,1) ~ maxwind_treat + l(gdp_diff,1:5) | year + countrycode[year] + countrycode[year2],
+  data = data_tc,
+  panel.id = c("countrycode", "year")
+)
+
+m2 <- feols(
+  f(loggdp,5) - l(loggdp,1) ~ maxwind_treat + l(gdp_diff,1:5)| year + countrycode[year] + countrycode[year2],
+  data = data_tc %>% filter(year>2008),
+  panel.id = c("countrycode", "year")
+)
+
+etable(m1, m2)
+```
+
+
+
+
+```{r, message=FALSE}
+sample_periods <- list(
+  "1970-2008" = 1969:2008,
+  "1995-2014" = 1994:2014,
+  "1990-2014" = 1989:2014,
+  "2000-2014" = 1999:2014
+)
+
+shocks <- c("maxwind", "maxwind_shock", 
+            "maxwind_treat", "maxwind_shock_filter",
+            "wind_cat1", "maxwind_shock_varweight")
+
+irfs_sub <- map_dfr(names(sample_periods), function(period_name) {
+  
+  years_range <- sample_periods[[period_name]]
+  data_sub <- data_tc %>% filter(year %in% years_range)
+  
+  map_dfr(shocks, function(shk) {
+    lp_panel(
+      data        = data_sub,
+      outcome     = "loggdp",
+      main_var    = shk,
+      horizon     = 10,
+      controls    = "l(gdp_diff,1) ",
+      fe          = "countrycode[year] + countrycode[year2] + year",
+      panel_id    = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(
+        shock  = shk,
+        period = period_name
+      )
+  })
+})
+
+irfs_full <- map_dfr(shocks, function(shk) {
+  lp_panel(
+    data        = data_tc,
+    outcome     = "loggdp",
+    main_var    = shk,
+    horizon     = 10,
+    controls    = "l(gdp_diff,1:2) + l(maxwind_shock,1:2)",
+    fe          = "countrycode[year] + countrycode[year2] + year",
+    panel_id    = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(
+      shock  = shk,
+      period = "Full Sample"
+    )
+})
+
+ggplot(irfs_sub, aes(x = horizon, y = irf_mean, color = period)) +
+  geom_line(linewidth = 1) +
+  geom_line(data = irfs_full, aes(x = horizon, y = irf_mean),
+            color = "black", linewidth = 1, linetype="dashed") +
+  geom_ribbon(data = irfs_full, aes(ymin = irf_down, ymax = irf_up),
+              fill = "dodgerblue", alpha = 0.1, color = NA) +
+  facet_wrap(~ shock, scales = "free_y") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(labels = percent_format(accuracy = 0.01)) +
+  labs(
+    x = "Horizon",
+    y = "IRF",
+    color = "Sample Period",
+    title = "IRFs Across Different Sample Periods"
+  ) +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+
+```
+
+
+
+
+
+#  FE-DL
+
+
+
+
+```{r}
+irfs_wind_cumulative <- cumulative_dl(
+  data = data_tc,
+  outcome = "gdp_diff",
+  main_var = "maxwind",
+  lags = 0:20,
+  fe = "countrycode[year] + countrycode[year2] + year",
+  panel_id = c("countrycode", "year"),
+  vcov_formula = DK ~ year,
+  shock_label = "Maximum Wind Speed Treatment"
+)
+
+ggplot(irfs_wind_cumulative, aes(x = lag, y = cumulative_effect)) +
+  geom_line(linewidth = 1.2, color = "steelblue") +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci),
+              fill = "steelblue", alpha = 0.15) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.7) +
+  theme_classic(base_size = 15) +
+  labs(
+    x = "Years after shock",
+    y = "Cumulative effect",
+    title = "Cumulative Distributed Lag Effects"
+  )
+```
+
+```{r}
+results_list <- list()
+
+lag_specs <- list(
+  "5 lags" = 0:5,
+  "10 lags" = 0:10,
+  "15 lags" = 0:15,
+  "20 lags" = 0:20
+)
+
+for (spec_name in names(lag_specs)) {
+  results_list[[spec_name]] <- cumulative_dl(
+    data = data_tc,
+    outcome = "gdp_diff",
+    main_var = "maxwind_treat",
+    lags = lag_specs[[spec_name]],
+    fe = "countrycode[year] + countrycode[year2] + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year,
+    shock_label = spec_name
+  )
+}
+
+# Combine all results
+all_results <- bind_rows(results_list, .id = "specification")
+
+# Plot with different specifications
+ggplot(all_results, aes(x = lag, y = cumulative_effect, 
+                        color = specification, fill = specification)) +
+  geom_line(linewidth = 1) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), 
+              alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.7) +
+  theme_classic(base_size = 15) +
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    x = "Years after shock",
+    y = "Cumulative effect on GDP growth",
+    title = "Robustness to Lag Length Specification",
+    color = "Specification",
+    fill = "Specification"
+  ) +
+  theme(legend.position = "bottom")
+
+```
+
+
+
+
+
+```{r, fig.width=5, fig.height=5, warning=FALSE}
+results_continent <- cumulative_dl_interact(
+  data = data_tc,
+  outcome = "gdp_diff",
+  main_var = "maxwind_treat",
+  interact_var = "period",
+  lags = 0:10,
+  fe = "countrycode[year] + countrycode[year2] + year",
+  panel_id = c("countrycode", "year"),
+  vcov_formula = DK ~ year
+)
+
+# Plot
+ggplot(results_continent, aes(x = lag, y = cumulative_effect, color = category, fill = category)) +
+  geom_line(linewidth = 1.1) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), 
+              alpha = 0.2, color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  scale_color_manual(values = c(myred, myblue,myyellow,myblack,mygreen)) +
+  scale_fill_manual(values = c(myred, myblue,myyellow,myblack,mygreen)) +
+  labs(
+    x = "Years after shock",
+    y = " GDP growth"
+  ) +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+ggsave("figures/irf_DL_interact_period.png", width = 5, height = 5)
+```
+
+
+
+
+
+
+
+
+# Treatment Analysis
+
+
+```{r, fig.width=5, fig.height=5, warning=FALSE}
+top10 <- data_tc %>%
+  slice_max(order_by = maxwind_shock, n = 10) %>%
+  mutate(label = paste0(countrycode, " (", year, ")")) %>%
+  select(label, maxwind, maxwind_shock) %>%
+  pivot_longer(
+    cols = c(maxwind_shock, maxwind),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# Get ordering based ONLY on wind shocks
+order_levels <- top10 %>%
+  filter(variable == "maxwind_shock") %>%
+  arrange(value) %>%
+  pull(label)
+
+top10$label <- factor(top10$label, levels = order_levels)
+
+ggplot(top10, aes(x = label, y = value, fill = variable)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  coord_flip() +
+  labs(
+    x = NULL,
+    y = "m/s",
+    fill = NULL,
+    title = "Top 10 Wind Shocks",
+  ) +
+  scale_fill_manual(
+    values = c(
+      "maxwind" = "steelblue",
+      "maxwind_shock" = "firebrick"
+    )
+  ) +
+  theme_classic()
+
+ggsave("figures/top10_wind_shocks.png", dpi=300)
+
+```
+
+
+```{r, fig.width=6, fig.height=5, warning=FALSE}
+
+events <- tribble(
+  ~countrycode, ~year, ~label,
+  "USA", 2005, "Katrina",
+  "USA", 1992, "Andrew",
+  "PHL", 2013, "Haiyan",
+  "DOM", 1979, "David",
+  "JPN", 1971, "Olive"
+)
+
+countries_keep <- c("USA", "JPN", "PHL", "DOM")
+
+df_plot <- data_tc %>%
+  filter(countrycode %in% countries_keep & year >1969)
+
+#print the top 3 max shock for each country and the year it occurred
+tab <- df_plot %>%
+  group_by(countrycode) %>%
+  slice_max(order_by = maxwind_shock, n = 3) %>%
+  select(countrycode, year, maxwind_shock) %>%
+  arrange(countrycode, desc(maxwind_shock))
+print(tab)
+
+ggplot(df_plot, aes(x = year, y = maxwind_shock)) +
+  geom_line(color = "steelblue",linewidth=1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  
+  # vertical hurricane markers
+  geom_vline(
+    data = events,
+    aes(xintercept = year),
+    color = "firebrick",
+    linetype = "dashed",
+    linewidth = 0.8
+  ) +
+  
+  # optional labels
+  geom_text(
+    data = events,
+    aes(x = year, y = Inf, label = label),
+    angle = 0,
+    vjust = 1.1,
+    hjust = 0.8,
+    color = "firebrick",
+    size = 3
+  ) +
+  
+  facet_wrap(~ countrycode, scales = "free_y",ncol=2) +
+  labs(
+    x = "Year",
+    y = "Max wind shock"
+  ) +
+  theme_classic(base_size = 14) 
+ggsave("figures/maxwind_shock_time_series.png", dpi=300)
+```
+
+
+```{r, fig.width=5, fig.height=5}
+
+plot_event_series <- function(data, var, ylab) {
+  
+  df <- data %>%
+    group_by(year) %>%
+    summarise(
+      avg = sum(.data[[var]], na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Fit linear trend
+  fit <- lm(avg ~ year, data = df)
+  slope <- coef(fit)[2]
+  
+  slope_label <- paste0(
+    ifelse(slope >= 0, "+", ""),
+    round(slope, 2),
+    " events / year"
+  )
+  
+  ggplot(df, aes(x = year, y = avg)) +
+    
+    # main series
+    geom_line(color = myblue, linewidth = 1.2) +
+    
+    # linear trend
+    geom_smooth(
+      method = "lm",
+      se = FALSE,
+      color = "indianred",
+      linetype = "dashed",
+      linewidth = 1.1
+    ) +
+    
+    # slope annotation
+    annotate(
+      "text",
+      x = min(df$year) + 0.05 * diff(range(df$year)),
+      y = max(df$avg, na.rm = TRUE),
+      label = slope_label,
+      color = "indianred",
+      hjust = 0,
+      vjust = 1,
+      size = 5,
+      fontface = "bold"
+    ) +
+    
+    labs(
+      x = "",
+      y = ylab
+    ) +
+    
+    # integer y-axis
+    scale_y_continuous(
+      breaks = scales::pretty_breaks(n = 6),
+      labels = scales::label_number(accuracy = 1)
+    ) +
+    
+    theme_classic(base_size = 15) +
+    theme(
+      axis.title = element_text(face = "bold"),
+      axis.text  = element_text(color = "black")
+    )
+}
+
+plot_event_series(
+  data_tc %>% filter(year >= 1970),
+  var  = "maxwind_95",
+  ylab = "# of 1-in-20 year wind events"
+)
+ggsave("figures/event_series_maxwind_95.png", dpi = 300)
+plot_event_series(
+  data_tc %>% filter(year >= 1970),
+  var  = "maxwind_treat",
+  ylab = "# of 1-in-20 year wind events (residualized)"
+)
+ggsave("figures/event_series_maxwind_treat.png", dpi = 300)
+
+plot_event_series(
+  data_tc %>% filter(year >= 1980),
+  var  = "maxwind_treat_filter",
+  ylab = "# of 1-in-20 year wind events (residualized)"
+)
+ggsave("figures/event_series_maxwind_treat_post80.png", dpi = 300)
+
+plot_event_series(
+  data_tc,
+  var  = "maxwind_sqkm_treat",
+  ylab = "# of 1-in-20 year wind/sqkm events (res.)"
+)
+
+plot_event_series(
+  data_tc,
+  var  = "maxwind_sqkm_treat_country",
+  ylab = "# of 1-in-20 year wind/sqkm events (res.)"
+)
+
+plot_event_series(
+  data_tc,
+  var  = "maxwind_sqkm_treat_varweight",
+  ylab = "# of 1-in-20 year wind/sqkm events (res.)"
+)
+
+
+
+```
+
+
+
+
+
+```{r, fig.width=10, fig.height=6, message=FALSE}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+ggsave("figures/event_timeline.png", dpi = 300)
+```
+
+```{r, fig.width=10, fig.height=6, message=FALSE}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat_filter > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat_filter > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+ggsave("figures/event_timeline_post80.png", dpi = 300)
+```
+
+
+
+
+
+
+
+```{r}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat_country > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat_country > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+ggsave("figures/event_timeline_pcountry.png", dpi = 300)
+```
+```{r, fig.width=10, fig.height=6, message=FALSE}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat_varweight > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat_varweight > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+ggsave("figures/event_timeline_varweight.png",dpi = 300)
+```
+
+
+```{r, fig.width=10, fig.height=6, message=FALSE}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_sqkm_treat > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_sqkm_treat > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+```
+
+```{r, fig.width=10, fig.height=6, message=FALSE}
+data_plot <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat_varweight_filter > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat_varweight_filter > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+```
+
+
+
+```{r}
+data_tc_filtered <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(max(maxwind, na.rm = TRUE) > 0 | max(nlands, na.rm = TRUE) > 0) %>%
+  ungroup()
+
+map_data <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(
+    data_tc_filtered %>%
+      group_by(countrycode) %>%
+      summarise(events = sum(maxwind_treat, na.rm = TRUE)),
+    by = c("iso_a3" = "countrycode")
+  )
+
+ggplot(map_data) +
+  geom_sf(aes(fill = events), color = "white", linewidth = 0.1) +
+  
+  scale_fill_gradientn(
+    colors = c (RColorBrewer::brewer.pal(9, "YlOrRd")),
+    limits = c(1, max(map_data$events, na.rm = TRUE)),
+    breaks = pretty_breaks(n = 5),
+    labels = label_number(accuracy = 1),
+    na.value = "grey90",
+    name = "# events"
+  ) +
+  
+  coord_sf(expand = FALSE) +
+  #robinson 
+  coord_sf(crs = "+proj=robin") +
+   theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_events95p.png", width = 8, height = 5, dpi = 300)
+
+```
+
+```{r, fig.width=5, fig.height=5}
+
+# Example: fully independent control for each arrow/text
+highlight_events <- tribble(
+  ~countrycode, ~year, ~label, ~arrow_start_y, ~arrow_end_y, ~label_y, ~arrow_color, ~arrow_size, ~label_color, ~label_hjust,
+  "USA", 2005, "USA 2005", 240, 20, 250, "dodgerblue", 1, "dodgerblue", -0.,
+  "PHL", 2013, "PHL 2013", 250, 20, 280, "dodgerblue", 1, "dodgerblue", 0.5,
+  "JPN", 1976, "JPN 1976", 200, 20, 230, "dodgerblue", 1, "dodgerblue", 0.6
+) %>%
+  left_join(data_tc %>% select(countrycode, year, maxwind_shock),
+            by = c("countrycode", "year"))
+
+# Plot
+ggplot(data_tc, aes(x = maxwind_shock)) +
+  geom_histogram(binwidth = 0.1, fill = myblue, color = "black", alpha = 0.7) +
+  
+  labs(x = "Maximum Wind Speed Shock", y = "Frequency") +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text  = element_text(color = "black")
+  ) +
+  
+  # Fully independent arrows
+  geom_segment(data = highlight_events,
+               aes(
+                 x = maxwind_shock, xend = maxwind_shock,
+                 y = arrow_start_y, yend = arrow_end_y,
+                 color = arrow_color,
+                 size = arrow_size
+               ),
+               arrow = arrow(length = unit(0.25, "cm"))
+  ) +
+  scale_color_identity() +   # so the colors from the table are used directly
+  scale_size_identity() +    # so sizes from the table are used directly
+
+  # Fully independent labels
+  geom_text(data = highlight_events,
+            aes(
+              x = maxwind_shock,
+              y = label_y,
+              label = label,
+              color = label_color,
+              hjust = label_hjust
+            ),
+            fontface = "bold"
+  ) +
+  scale_color_identity()
+ggsave("figures/histogram_shock_events.png", width = 5, height = 5, dpi = 300)
+
+```
+
+
+```{r, fig.width=5, fig.height=5}
+#correlation between treatment and maxwind
+ggplot(data_tc, aes(x = maxwind, y = maxwind_shock)) +
+  geom_point(alpha = 0.5) +
+  labs(x = "Max Wind Speed", y = "Max Wind Speed Shock") +
+  theme_classic(base_size = 15) +
+  #display r and p 
+  annotate("text", x = 1, y = 40, label = paste0("r = ", round(cor(data_tc$maxwind, data_tc$maxwind_shock, use = "complete.obs"), 2)), hjust = 0, size=5) 
+ggsave("figures/correlation_shock_maxwind.png", width = 5, height = 5, dpi = 300)
+```
+
+```{r, fig.width=8, fig.height=5}
+countries_plot <- c("USA", "JPN", "PHL", "MOZ", "CAN", "AUS")
+
+df_plot <- data_tc %>%
+  filter(countrycode %in% countries_plot)
+
+make_country_plot <- function(cty) {
+  
+  df_cty <- df_plot %>% filter(countrycode == cty)
+  
+  shock_max <- max(abs(df_cty$maxwind_shock), na.rm = TRUE)
+  wind_max  <- max(df_cty$maxwind, na.rm = TRUE)
+  
+  scale_factor <- 1 * wind_max / shock_max
+  
+  ggplot(df_cty, aes(x = year)) +
+    
+    # Shock bars (left axis)
+    geom_col(aes(y = maxwind_shock),
+             fill = "firebrick",
+             alpha = 0.6) +
+    
+    # Raw windspeed (right axis, rescaled)
+    geom_line(aes(y = maxwind / scale_factor),
+              color = "steelblue",
+              linewidth = 1) +
+    
+    scale_y_continuous(
+      name = "Shock",
+      limits = c(-shock_max, shock_max),  # symmetric shock axis
+      sec.axis = sec_axis(
+        trans = ~ . * scale_factor,
+        name = "Max Wind",
+        breaks = seq(0, ceiling(wind_max), by = 20)
+      )
+    ) +
+    
+    labs(title = cty, x = NULL) +
+    
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      axis.title.y.left  = element_text(color = "firebrick"),
+      axis.title.y.right = element_text(color = "steelblue")
+    )
+}
+
+p <- lapply(countries_plot, make_country_plot)
+
+wrap_plots(p, ncol = 2)
+ggsave("figures/shock_wind_comparison.png", dpi = 300)
+
+```
+
+```{r}
+countries_plot <- c("USA", "JPN", "PHL", "MOZ", "CAN", "AUS")
+
+df_plot <- data_tc %>%
+  filter(countrycode %in% countries_plot)
+
+make_country_plot <- function(cty) {
+  
+  df_cty <- df_plot %>% filter(countrycode == cty)
+  
+  shock_max <- max(abs(df_cty$maxwind_sqkm_shock), na.rm = TRUE)
+  wind_max  <- max(df_cty$maxwind_sqkm_shock, na.rm = TRUE)
+  
+  scale_factor <- 0.5 * wind_max / shock_max
+  
+  ggplot(df_cty, aes(x = year)) +
+    
+    # Shock bars (left axis)
+    geom_col(aes(y = maxwind_sqkm_shock),
+             fill = "firebrick",
+             alpha = 0.6) +
+    
+    # Raw windspeed (right axis, rescaled)
+    geom_line(aes(y = maxwind_sqkm / scale_factor),
+              color = "steelblue",
+              linewidth = 1) +
+    
+    scale_y_continuous(
+      name = "Shock",
+      limits = c(-shock_max, shock_max),  # symmetric shock axis
+      sec.axis = sec_axis(
+        trans = ~ . * scale_factor,
+        name = "Max Wind",
+        breaks = seq(0, ceiling(wind_max), by = 20)
+      )
+    ) +
+    
+    labs(title = cty, x = NULL) +
+    
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      axis.title.y.left  = element_text(color = "firebrick"),
+      axis.title.y.right = element_text(color = "steelblue")
+    )
+}
+
+p <- lapply(countries_plot, make_country_plot)
+
+wrap_plots(p, ncol = 2)
+```
+
+```{r}
+#print year of max wind for each country
+data_tc %>%
+  filter(maxwind > 0) %>%
+  group_by(countrycode) %>%
+  summarise(
+    maxwind_year = year[which.max(maxwind_shock)],
+    maxwind_sqkm_year = year[which.max(maxwind_sqkm_shock)],
+    maxwind_shock      = max(maxwind_shock, na.rm = TRUE),
+    maxwind_sqkm_shock = 1000*max(maxwind_sqkm_shock, na.rm = TRUE)
+  ) %>%
+  arrange(desc(maxwind_sqkm_shock))
+```
+
+
+
+
+```{r, fig.width=8, fig.height=5}
+top15 <- data_tc %>%
+  group_by(countrycode) %>%
+  summarise(avg_maxwind = mean(maxwind, na.rm = TRUE)) %>%
+  arrange(desc(avg_maxwind)) %>%
+  slice(1:15)
+
+data_plot <- data_tc %>%
+  filter(countrycode %in% top15$countrycode) %>%
+  group_by(countrycode) %>%
+  summarise(
+    avg_maxwind = mean(maxwind, na.rm = TRUE),
+    n_events    = sum(maxwind_treat == 1, na.rm = TRUE)
+  ) %>%
+  arrange(desc(avg_maxwind)) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(countrycode)))
+
+p1 <- ggplot(data_plot, aes(x = n_events, y = countrycode)) +
+  geom_segment(aes(x = 0, xend = n_events,
+                   y = countrycode, yend = countrycode),
+               color = "steelblue",
+               linewidth = 1.1) +
+  geom_point(size = 3, color = "steelblue") +
+  labs(
+    x = "",
+    y = NULL,
+    title = "Number of Events"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+
+p2 <- ggplot(data_plot, aes(x = avg_maxwind, y = countrycode)) +
+  geom_segment(aes(x = 0, xend = avg_maxwind,
+                   y = countrycode, yend = countrycode),
+               color = "firebrick",
+               linewidth = 1.1) +
+  geom_point(size = 3, color = "firebrick") +
+  labs(
+    x = "m/s",
+    y = NULL,
+    title = "Max Wind (average 1970-2014)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+p2 + p1 + plot_layout(ncol = 2)
+ggsave("figures/top15_countries.png", width = 8, height = 5, dpi = 300)
+```
+
+```{r, message = FALSE, fig.width=6, fig.height=4}
+treatments <- c("maxwind_shock", "maxwind_shock_varweight")
+irfs <- list()
+for (treat in treatments) {
+
+  irf <- lp_panel(
+    data = data_tc,
+    outcome = "maxwind",
+    main_var = treat,
+    horizon = 10,
+    fe = "countrycode[year] + countrycode[year2] + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  )
+  irfs[[treat]] <- irf %>%
+    mutate(treatment = treat)
+}
+
+#Plot
+irfs_all <- bind_rows(irfs)
+ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.15, color = NA, fill = "dodgerblue"
+  ) +
+  geom_line(size = 1.1, color = "dodgerblue") +
+  
+  facet_wrap(~ treatment, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Max Wind"
+  ) +
+  #make x axis discrete  2x,4,6,8,10
+  scale_x_continuous(breaks = seq(0, 10, by = 2)) +
+  theme_classic(base_size = 15) 
+
+ggsave("figures/irf_maxwind.png", dpi = 300)
+
+
+```
+
+
+
+
+
+
+
+# CLEAN CONTROL
+```{r}
+
+data_cleancontrol <- data_tc %>%
+  group_by(countrycode, period) %>%
+  summarise(
+    any_treated = any(maxwind_treat == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(countrycode) %>%
+  filter(
+    # keep if never treated anywhere
+    all(!any_treated) |
+    # OR treated in both periods
+    all(any_treated)
+  ) %>%
+  pull(countrycode) %>%
+  {\(keep) data_tc %>% filter(countrycode %in% keep)}()
+
+data_cc_80 <- data_tc %>%
+  group_by(countrycode, period) %>%
+  summarise(
+    any_treated = any(maxwind_treat_filter == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(countrycode) %>%
+  filter(
+    # keep if never treated anywhere
+    all(!any_treated) |
+    # OR treated in both periods
+    all(any_treated)
+  ) %>%
+  pull(countrycode) %>%
+  {\(keep) data_tc %>% filter(countrycode %in% keep)}()
+
+```
+
+```{r}
+data_plot <- data_cleancontrol %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_treat > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_treat > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+```
+
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    controls = lp_controls,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "maxwind_treat_country",
+    "maxwind_treat_varweight"
+  ),
+  label = c(
+    "Base",
+    "Country threshold",
+    "Var. weighted shock"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_cleancontrol
+) %>% filter(category!="2010s")
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.15, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+ggsave("figures/irf_comparison_cleancontrol.png", dpi = 300)
+
+```
+# Treatment definitions 
+
+```{r, fig.width=8, fig.height=6, message=FALSE}
+# Define shocks and their labels
+shocks <- list(
+  maxwind_treat = "Base",
+  maxwind_treat_filter = "Base (1980+)",
+  maxwind_treat_varweight = "Var. weighted shock",
+  maxwind_treat_varweight_filter = "Var weighted shock (1980+)",
+  maxwind_treat_country = "Country Threshold",
+  maxwind_treat_country_filter = "Country Threshold (1980+)"
+)
+  
+
+# Run lp_panel for each shock
+irfs_all <- imap_dfr(shocks, ~ {
+  lp_panel(
+    data = data_tc,
+    outcome = "loggdp",
+    controls = "l(gdp_diff,1:2)",
+    main_var = .y,
+    horizon = 10,
+    fe = "countrycode[year] + countrycode[year2] + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(shock = .x)
+})
+
+# Plot
+ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, fill = myblue) +
+  geom_line(size = 1.1, color = myblue) +
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+
+# DECADE
+
+```{r, message=FALSE, fig.width=10, fig.height=8}
+
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "decade"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    controls = lp_controls,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "maxwind_treat_country",
+    "maxwind_treat_varweight",
+     "maxwind_treat_filter",
+     "maxwind_treat_country_filter",
+     "maxwind_treat_varweight_filter"
+    
+    
+  ),
+  label = c(
+    "Base",
+    "Country threshold",
+    "Var. weighted shock",
+    "Base (1980+)",
+    "Country threshold (1980+)",
+    "Var. weighted shock (1980+)"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+) %>% filter(category!="2010s") %>%
+  #remove 1970s from 80+ data
+   filter(!(category == "1970s" & shock %in% c("Base (1980+)", "Country threshold (1980+)", "Var. weighted shock (1980+)")))
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.15, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+ggsave("figures/irf_comparison_decade.png", dpi = 300)
+
+```
+
+
+```{r, fig.width=10, fig.height=5,message=FALSE}
+
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2]  +year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- "l(gdp_diff,1:2)"
+
+lp_interacts <- c("maxwind_treat_past3",
+                  "maxwind_treat_past5",
+                  "maxwind_treat_past10",
+                  "maxwind_treat_past15")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_cleancontrol,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_df <- irf_df %>%
+  mutate(past_years = recode(past_years,
+                             "maxwind_treat_past5"  = "Past 5 yrs",
+                             "maxwind_treat_past10"  = "Past 10 yrs",
+                             "maxwind_treat_past15"  = "Past 15 yrs",
+                             "maxwind_treat_past3" = "Past 3 yrs")) %>%
+  mutate(past_years = factor(past_years, levels = c("Past 3 yrs", "Past 5 yrs", "Past 10 yrs", "Past 15 yrs")))
+
+
+# ----------------------------
+# Faceted IRF plot
+# ----------------------------
+ggplot(irf_df, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, color = NA) +
+  geom_line(size = 1.1) +
+  labs(
+    x = "Horizon",
+    y = "% GDP variation",
+    color = "Extreme event in past N years",
+    fill = "Extreme event in past N years"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  facet_wrap(~past_years, ncol = 4) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+ggsave("figures/irf_by_past_events.png", dpi = 300)
+```
+
+```{r}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    controls = lp_controls,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "maxwind_treat_country",
+    "maxwind_treat_varweight"
+  ),
+  label = c(
+    "Base",
+    "Country threshold",
+    "Var. weighted shock"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_cleancontrol
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.15, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+```
+
+
+
+
+# MAIN IRF
+
+
+```{r, fig.width=7, fig.height=5, message=FALSE}
+shocks <- c("maxwind_95", "energy_95")
+
+# Compute IRFs
+irfs_all <- map_dfr(shocks, ~ 
+  lp_panel(
+    data = data_tc,
+    outcome = "loggdp",
+    main_var = .x,
+    horizon = 10,
+    controls="l(gdp_diff,1:2)",
+    fe = "countrycode[year] + countrycode[year2]  + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(shock = .x)
+)
+
+#get main irf 
+irf_main <- irfs_all %>%
+  filter(shock =="maxwind_95")
+
+# Plot
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = shock, fill = shock, linetype = shock)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15) +
+  geom_line(linewidth = 1.1) +
+  scale_color_manual(values = c("maxwind_95" = myblue, "energy_95" = myred),
+                     labels = c("Energy", "Max Wind Speed")) +
+  scale_fill_manual(values = c("maxwind_95" = myblue, "energy_95" = myred),
+                    labels = c("Energy", "Max Wind Speed")) +
+  scale_linetype_manual(values = c("maxwind_95" = "solid", "energy_95" = "dotdash"),
+                        labels = c("Energy", "Max Wind Speed")) +
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+
+ggsave("figures/irf_maxwind_energy.png", dpi = 300)
+```
+
+
+```{r, fig.width=5, fig.height=5,message=FALSE}
+# ----------------------------
+# LP settings
+# ----------------------------
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_95"
+lp_horizon  <- 12
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+# ----------------------------
+# Run LP
+# ----------------------------
+irf_df <- lp_panel_inter(
+  data         = data_tc,
+  outcome      = lp_outcome,
+  main_var     = lp_shock,
+  interact_var = lp_interact,
+  horizon      = lp_horizon,
+  fe           = lp_fe,
+  panel_id     = lp_panel_id,
+  vcov_formula = lp_vcov,
+  controls     = lp_controls
+)
+
+# ----------------------------
+# Top plot: IRFs
+# ----------------------------
+p_irf <- ggplot(irf_df, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up, color = category, fill = category), alpha = 0.2, color = NA) +
+  #plot irf_main
+  geom_line(data = irf_main, aes(x = horizon, y = irf_mean, ), size = 0.9, color='black') +
+  geom_line(size = 1.1, aes(color = category, fill = category)) +
+  labs(
+    x = "",
+    y = "% GDP variation",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+# ----------------------------
+# Bottom plot: maxwind_95 density by period
+# ----------------------------
+data_tc_hist <- data_tc %>%
+  filter(maxwind > 0) %>%
+  mutate(period = ifelse(year < 1990, "Before 1990", "After 1990")) %>% 
+  group_by(year) %>%
+  summarise(
+    maxwind_treat = sum(maxwind_95, na.rm = TRUE),
+    period = first(period)
+  )
+
+p_hist <- ggplot(
+  data_tc_hist,
+  aes(x = maxwind_treat, y = period, color = period)
+) +
+  geom_jitter(
+    height = 0.18,
+    alpha = 0.9,
+    size = 1
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    size = 2.5,
+    color = "black"
+  ) +
+  labs(
+    x = "# of extreme events per year",
+    y = ""
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(face = "bold")
+  ) +
+  #add integer breaks to x axis
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
+
+
+# ----------------------------
+# Combine top and bottom
+# ----------------------------
+p_irf / p_hist + plot_layout(heights = c(3, 1))
+
+ggsave("figures/irf_maxwind_periods.png", dpi = 300)
+
+```
+
+
+```{r, fig.width=6, fig.height=5, message=FALSE}
+shocks <- c("maxwind_treat", "energy_treat")
+
+# Compute IRFs
+irfs_all <- map_dfr(shocks, ~ 
+  lp_panel(
+    data = data_tc,
+    outcome = "loggdp",
+    main_var = .x,
+    horizon = 10,
+    controls="l(gdp_diff,1:2)",
+    fe = "countrycode[year] + countrycode[year2] + countrycode[year3] + countrycode[year4] year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(shock = .x)
+)
+
+#get main irf 
+irf_main <- irfs_all %>%
+  filter(shock =="maxwind_treat")
+
+# Plot
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = shock, fill = shock, linetype = shock)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15) +
+  geom_line(linewidth = 1.1) +
+  scale_color_manual(values = c("maxwind_treat" = myblue, "energy_treat" = myred),
+                     labels = c("Energy", "Max Wind Speed")) +
+  scale_fill_manual(values = c("maxwind_treat" = myblue, "energy_treat" = myred),
+                    labels = c("Energy", "Max Wind Speed")) +
+  scale_linetype_manual(values = c("maxwind_treat" = "solid", "energy_treat" = "dotdash"),
+                        labels = c("Energy", "Max Wind Speed")) +
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+
+ggsave("figures/irf_maxwindtreat_energy.png", dpi = 300)
+```
+
+
+```{r, fig.width=5, fig.height=5,message=FALSE}
+# ----------------------------
+# LP settings
+# ----------------------------
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+# ----------------------------
+# Run LP
+# ----------------------------
+irf_df <- lp_panel_inter(
+  data         = data_tc,
+  outcome      = lp_outcome,
+  main_var     = lp_shock,
+  interact_var = lp_interact,
+  horizon      = lp_horizon,
+  fe           = lp_fe,
+  panel_id     = lp_panel_id,
+  controls     = lp_controls,
+  vcov_formula = lp_vcov
+)
+
+# ----------------------------
+# Top plot: IRFs
+# ----------------------------
+p_irf <- ggplot(irf_df, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up, color = category, fill = category), alpha = 0.2, color = NA) +
+  #plot irf_main
+  geom_line(data = irf_main, aes(x = horizon, y = irf_mean, ), size = 0.9, color='black') +
+  geom_line(size = 1.1, aes(color = category, fill = category)) +
+  labs(
+    x = "",
+    y = "% GDP variation",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+# ----------------------------
+# Bottom plot: maxwind_95 density by period
+# ----------------------------
+data_tc_hist <- data_tc %>%
+  filter(maxwind > 0) %>%
+  mutate(period = ifelse(year < 1990, "Before 1990", "After 1990")) %>% 
+  group_by(year) %>%
+  summarise(
+    maxwind_treat = sum(maxwind_95, na.rm = TRUE),
+    period = first(period)
+  )
+
+p_hist <- ggplot(
+  data_tc_hist,
+  aes(x = maxwind_treat, y = period, color = period)
+) +
+  geom_jitter(
+    height = 0.18,
+    alpha = 0.9,
+    size = 1
+  ) +
+  stat_summary(
+    fun = median,
+    geom = "point",
+    size = 2.5,
+    color = "black"
+  ) +
+  labs(
+    x = "# of extreme events per year",
+    y = ""
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(face = "bold")
+  ) +
+  #add integer breaks to x axis
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
+
+
+# ----------------------------
+# Combine top and bottom
+# ----------------------------
+p_irf / p_hist + plot_layout(heights = c(3, 1))
+
+ggsave("figures/irf_maxwindtreat_periods.png", dpi = 300)
+
+```
+
+# Interact with Past treatment Dummy
+
+```{r, fig.width=10, fig.height=5,message=FALSE}
+
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2]  +year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- "l(gdp_diff,1:2)"
+
+lp_interacts <- c("maxwind_treat_past3",
+                  "maxwind_treat_past5",
+                  "maxwind_treat_past10",
+                  "maxwind_treat_past15")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_tc,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_df <- irf_df %>%
+  mutate(past_years = recode(past_years,
+                             "maxwind_treat_past5"  = "Past 5 yrs",
+                             "maxwind_treat_past10"  = "Past 10 yrs",
+                             "maxwind_treat_past15"  = "Past 15 yrs",
+                             "maxwind_treat_past3" = "Past 3 yrs")) %>%
+  mutate(past_years = factor(past_years, levels = c("Past 3 yrs", "Past 5 yrs", "Past 10 yrs", "Past 15 yrs")))
+
+
+# ----------------------------
+# Faceted IRF plot
+# ----------------------------
+ggplot(irf_df, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, color = NA) +
+  geom_line(size = 1.1) +
+  labs(
+    x = "Horizon",
+    y = "% GDP variation",
+    color = "Extreme event in past N years",
+    fill = "Extreme event in past N years"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  facet_wrap(~past_years, ncol = 4) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+ggsave("figures/irf_maxwindtreat_pastyears.png", dpi = 300)
+```
+
+```{r, fig.width=6, fig.height=5,message=FALSE}
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat_varweight"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- "l(gdp_diff,2:3)"
+
+lp_interacts <- c("ttl_bin2")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_tc,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_df <- irf_df %>%
+  mutate(
+    category = factor(
+      category,
+      levels = c(
+        "No past shock",
+        "1-5",
+        "5-10",
+        "10-15",
+        "15-20",
+        "20+"
+      )
+    )
+  )
+
+greta_colors <- c(
+  "No past shock" = "#333333",  # dark red (recent / baseline)
+  "1-5"          = "#F46D43",
+  "5-10"         = "#FDAE61",
+  "10-15"        = "#FEE08B",
+  "15-20"        = "#A6D96A",
+  "20+"          = "#2C7BB6"   # deep blue (old shocks)
+)
+
+
+# ----------------------------
+# Faceted IRF plot
+# ----------------------------
+ggplot(irf_df, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_line(size = 1.1) +
+  labs(
+    x = "Horizon",
+    y = "% GDP growth",
+    color = "Time since last event",
+    fill = "Time since last event"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+   scale_color_manual(values = greta_colors) +
+  scale_fill_manual(values = greta_colors) +
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+```
+```{r, fig.width=6, fig.height=5,message=FALSE}
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- NULL# "l(gdp_diff,2:5)"
+
+lp_interacts <- c("ttl_bin3")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_tc,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_df <- irf_df %>%
+  mutate(
+    category = factor(
+      category,
+      levels = c(
+        "No past shock",
+        "1-5",
+        "5-10",
+        "10+"
+      )
+    )
+  )
+greta_colors <- setNames(
+  brewer.pal(4, "Spectral")[c(4,3,2,1)],
+  c("No past shock", "1-5", "5-10", "10+")
+)
+
+
+# ----------------------------
+# Faceted IRF plot
+# ----------------------------
+ggplot(irf_df, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_line(size = 1.1) +
+  # geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.1, color = NA) +
+  labs(
+    x = "Horizon",
+    y = "% GDP growth",
+    color = "Years since last event",
+    fill = "Years since last event"
+  ) +
+  guides(color = guide_legend(nrow = 2), fill = guide_legend(nrow = 2)) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+   scale_color_manual(values = greta_colors) +
+  scale_fill_manual(values = greta_colors) +
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+ggsave("figures/irf_maxwindtreat_ttlbin3.png", dpi = 300)
+```
+
+```{r, fig.width=6, fig.height=5,message=FALSE}
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- NULL #"l(loggdp,2:10)"
+
+lp_interacts <- c("ttl_bin")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_tc,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_df <- irf_df %>%
+  mutate(
+    category = factor(
+      category,
+      levels = c(
+        "No past shock",
+        "1-3",
+        "3-5",
+        "5-7",
+        "7-10",
+        "10-15",
+        "15-20",
+        "20+"
+      )
+    )
+  )
+
+greta_colors <- c(
+  "No past shock" = "#333333",  # dark red
+  "1-3"          = "#D73027",
+  "3-5"          = "#F46D43",
+  "5-7"          = "#FDAE61",
+  "7-10"         = "#FEE08B",
+  "10-15"        = "#A6D96A",
+  "15-20"        = "#4DAF4A",
+  "20+"          = "#2C7BB6"   # deep blue
+)
+
+
+# ----------------------------
+# Faceted IRF plot
+# ----------------------------
+ggplot(irf_df, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_line(size = 1.1) +
+  labs(
+    x = "Horizon",
+    y = "% GDP variation",
+    color = "Time since last event",
+    fill = "Time since last event"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+   scale_color_manual(values = greta_colors) +
+  scale_fill_manual(values = greta_colors) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+```
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 15
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_controls <- NULL #"l(loggdp,2:10)"
+
+lp_interacts <- c("ttl_bin3")
+
+# ----------------------------
+# Run LPs for all past-year indicators
+# ----------------------------
+irf_list <- map(lp_interacts, function(interact_var) {
+  df <- lp_panel_inter(
+    data         = data_tc,
+    outcome      = lp_outcome,
+    main_var     = lp_shock,
+    interact_var = interact_var,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    controls     = lp_controls
+  )
+  df$past_years <- interact_var # keep track of which past indicator
+  return(df)
+})
+
+irf_df <- bind_rows(irf_list)
+
+irf_recovery <- irf_df %>%
+  group_by(category) %>%
+  arrange(horizon) %>%
+  dplyr::summarize(
+    first_below_zero = ifelse(any(irf_mean < 0), min(horizon[irf_mean < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(irf_mean < 0) & any(irf_mean >= 0 & horizon > min(horizon[irf_mean < 0])),
+      min(horizon[irf_mean >= 0 & horizon > min(horizon[irf_mean < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ 0,      # never goes below 0
+      is.na(first_back_to_zero) ~lp_horizon , # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop"
+  )
+irf_recovery <- irf_recovery %>%
+  mutate(
+    category = factor(
+      category,
+      levels = c(
+        "1-5",
+        "5-10",
+        "10+",
+        "No past shock"
+      )
+    )
+  )
+
+
+ggplot(irf_recovery, aes(x = category, y = recovery_time)) +
+  geom_point(
+    size = 3,
+    shape = 4,              # "x" marker
+    color = "steelblue",
+    stroke = 1.2
+  ) +
+  geom_line(
+    group = 1,
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  scale_y_continuous(
+    limits = c(0, 15)
+  ) +
+  labs(
+    x = "Time since last event",
+    y = "Estimated recovery time (years)"
+  ) +
+  theme_classic(base_size = 15)
+ggsave("figures/recovery_time_ttlbin3.png", dpi = 300)
+```
+
+
+# Individual IRFS
+
+
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+
+mod_fstage <- feols(
+  loggdp ~ 1 | countrycode[year] + countrycode[year2] + year + countrycode,
+  data = data_tc
+)
+
+data_tc$loggdp_hat <- predict(mod_fstage, newdata = data_tc)
+data_tc$loggdp_hat <- data_tc$loggdp - data_tc$loggdp_hat
+data_tc$gdp_hat_diff <- data_tc$loggdp_hat - dplyr::lag(data_tc$loggdp_hat)
+
+
+mycountry <- 'USA'
+horizon <- 9
+
+data_tc <- data_tc %>%
+  mutate(
+    disaster_code = if_else(
+      countrycode == mycountry & maxwind_treat == 1,
+      paste0("i_", year),
+      NA_character_
+    )
+  )
+
+
+#make one column for each disaster code, with 1 if treated in that year, 0 otherwise
+us_dummies <- data_tc %>%
+  pivot_wider(
+    id_cols = c(countrycode, year),
+    names_from = disaster_code,
+    values_from = maxwind_treat,
+    values_fill = list(maxwind_treat = 0)
+  )
+
+data_tc2 <- data_tc %>%
+  left_join(us_dummies, by = c("countrycode", "year"))
+
+disaster_cols <- names(us_dummies)[!(names(us_dummies) %in% c("countrycode","year","NA"))]
+#remove years after 2014 - h +1
+disaster_cols <- disaster_cols[as.numeric(sub("i_", "", disaster_cols)) <= 2014 - horizon ]
+
+
+irfs_list <- map_dfr(disaster_cols, function(colname) {
+  
+  # skip if column is NA (just in case)
+  if(!colname %in% names(data_tc2)) return(NULL)
+  
+  lp <- lp_panel(
+    data        = data_tc2,
+    outcome     = "loggdp",
+    main_var    = colname,
+    horizon     = horizon,
+    controls    = NULL, #"l(gdp_diff,1:2)",
+    fe          = "countrycode[year] + countrycode[year2]  + year + countrycode  ",       # already residualized
+    panel_id    = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  )
+  
+  # add column info
+  lp %>% mutate(disaster_code = colname)
+})
+
+
+# Extract the event year from disaster_code
+irfs_time <- irfs_list %>%
+  mutate(
+    event_year = as.numeric(sub("i_", "", disaster_code)),
+    cal_year = event_year + horizon  # calendar time = event year + horizon
+  )
+
+
+p_irf <- ggplot(irfs_time, aes(x = cal_year, y = irf_mean, color = disaster_code)) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up, fill = disaster_code),
+              alpha = 0.1, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    x = "",
+    y = "IRF",
+    color = "Disaster",
+    fill  = "Disaster"
+  ) +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+# ---- Timeline of maxwind shocks ----
+maxcal <- max(irfs_time$cal_year, na.rm = TRUE)
+timeline_data <- data_tc2 %>%
+  filter(countrycode == mycountry & maxwind_treat == 1) 
+
+p_timeline <- ggplot(timeline_data, aes(x = year, y = maxwind_shock)) +
+  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+  labs(x = "Year", y = "Maxwind Shock") +
+  theme_classic() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    axis.title.y = element_text(size = 10),
+    axis.title.x = element_text(size = 10)
+  )
+
+
+x_min <- min(irfs_time$cal_year, timeline_data$year, na.rm = TRUE)-1
+x_max <- max(irfs_time$cal_year, timeline_data$year, na.rm = TRUE)
+x_breaks <- seq(x_min, x_max, by = 5)
+
+p_irf <- p_irf +
+  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks) +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+
+p_timeline <- p_timeline +
+  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks)
+
+p_final <- p_irf / p_timeline + plot_layout(heights = c(3, 0.5))
+
+
+ggsave(filename = paste0("figures/irfs_events_", mycountry, ".png"), plot = p_final,
+       dpi = 300)
+
+p_final
+```
+
+
+
+
+
+# IRF per country
+
+
+
+```{r, message=FALSE, fig.width=10, fig.height=5}
+country_covars <- data_tc %>%
+  group_by(countrycode) %>%
+  summarise(
+    mean_maxwind      = mean(maxwind, na.rm = TRUE),
+    n_treated         = sum(maxwind_treat == 1, na.rm = TRUE),
+    avg_loggdp_pc     = mean(ln_real_gdp_usd_pc, na.rm = TRUE)
+  )
+
+irfs_covars <- irfs_country %>%
+  left_join(country_covars, by = "countrycode")
+
+irfs_covars_min <- irfs_covars %>%
+  group_by(countrycode) %>%
+  summarise(
+    min_irf = min(irf, na.rm = TRUE),
+    max_irf = max(irf, na.rm = TRUE),
+    mean_maxwind = mean(mean_maxwind, na.rm = TRUE),
+    n_treated = mean(n_treated, na.rm = TRUE),
+    avg_loggdp_pc = mean(avg_loggdp_pc, na.rm = TRUE)
+  )
+
+#get recovery time from irf going back to 0 after going negative
+recovery_time <- irfs_covars %>%
+  group_by(countrycode) %>%
+  arrange(horizon) %>%
+  summarise(
+    first_below_zero = ifelse(any(irf < 0), min(horizon[irf < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(irf < 0) & any(irf >= 0 & horizon > min(horizon[irf < 0])),
+      min(horizon[irf >= 0 & horizon > min(horizon[irf < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ 0,      # never goes below 0
+      is.na(first_back_to_zero) ~ lp_horizon, # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop",
+    mean_maxwind = mean(mean_maxwind, na.rm = TRUE),
+    n_treated = mean(n_treated, na.rm = TRUE),
+    avg_loggdp_pc = mean(avg_loggdp_pc, na.rm = TRUE)
+  )
+
+mod <- lm(min_irf ~ mean_maxwind + n_treated + avg_loggdp_pc, data = irfs_covars_min, vcov = sandwich::vcovHC(type = "HC1"))
+print(summary(mod))
+
+mod <- lm(max_irf ~ mean_maxwind + n_treated + avg_loggdp_pc, data = irfs_covars_min, vcov = sandwich::vcovHC(type = "HC1"))
+print(summary(mod))
+
+# recovery tine
+
+mod <- lm(recovery_time ~ mean_maxwind*n_treated*avg_loggdp_pc, data = recovery_time, vcov = sandwich::vcovHC(type = "HC1"))
+print(summary(mod))
+
+irfs_long <- irfs_covars %>%
+  pivot_longer(
+    cols = c(mean_maxwind, n_treated, avg_loggdp_pc),
+    names_to = "covariate",
+    values_to = "value"
+  )
+
+ggplot(irfs_long,
+       aes(x = value, y = irf)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = T) +
+  facet_grid(horizon~covariate , scales = "free_x") +
+  theme_minimal() +
+  labs(
+    x = NULL,
+    y = "IRF"
+  ) +
+  #print pearson correlation in each facet
+  stat_cor(method = "pearson", label.x.npc = "left", label.y.npc = "top", size = 4) +
+  theme_classic(base_size = 13) 
+
+mod <- lm(irf ~ as.factor(horizon):mean_maxwind + as.factor(horizon):n_treated + as.factor(horizon):avg_loggdp_pc, data = irfs_covars, vcov = sandwich::vcovHC(type = "HC1"))
+summary(mod) %>% print()
+```
+
+
+
+
+
+# Misc
+
+
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+shock_map <- tibble::tribble(
+  ~var, ~label, ~dataset,
+  "maxwind_treat",        "Wind treatment",           data_cleancontrol,
+  "maxwind_sqkm_treat",   "Wind per sqkm treatment",  data_cc_sqkm,
+  "maxwind_shock",        "Wind shock",               data_cleancontrol,
+  "maxwind_sqkm_shock",   "Wind per sqkm shock",      data_cc_sqkm,
+  "maxwind",              "Wind speed",               data_cleancontrol,
+  "maxwind_sqkm",         "Wind speed per sqkm",      data_cc_sqkm
+)
+
+
+run_lp <- function(var, label, dataset) {
+  
+  lp_panel_inter(
+    data          = dataset,
+    outcome       = lp_outcome,
+    main_var      = var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls      = lp_controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = label)
+}
+
+irfs_all <- purrr::pmap_dfr(shock_map, run_lp)
+
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 14) +
+  # x-axis integer by 2
+  scale_x_continuous(breaks = seq(0, lp_horizon, by = 2)) +
+  
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+ggsave("figures/irf_all_shocks.png", dpi = 300)
+
+```
+
+
+
+
+
+
+
+```{r, fig.width=12, fig.height=5, message=FALSE}
+# Define shocks and their labels
+shocks <- list(
+  maxwind_treat = "Maximum Wind Speed",
+  nlands_treat = "Number of Landfalls",
+  energy_treat = "Storm Energy")
+
+# Run lp_panel for each shock
+irfs_all <- imap_dfr(shocks, ~ {
+  lp_panel(
+    data = data_tc,
+    outcome = "loggdp",
+    controls = "l(gdp_diff,1:2)",
+    main_var = .y,
+    horizon = 10,
+    fe = "countrycode[year] + countrycode[year2] + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(shock = .x)
+})
+
+# Plot
+ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, fill = myblue) +
+  geom_line(size = 1.1, color = myblue) +
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+
+
+
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period3"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    controls = lp_controls,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_95",
+    "nlands_95",
+    "energy_95"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+```
+
+
+
+```{r, message=FALSE, fig.width=10, fig.height=6}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "decade"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    controls = lp_controls,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "maxwind_sqkm_shock",
+    "maxwind_sqkm_treat",
+    "maxwind_shock",
+    "nlands_sqkm_treat",
+    "nlands_sqkm_shock",
+    "nlands_treat",
+    "nlands_shock"
+  ),
+  label = c(
+    "Wind treatment",
+    "Wind per sqkm shock",
+    "Wind per sqkm treatment",
+    "Wind shock",
+    "Landfalls per sqkm treat",
+    "Landfalls per sqkm shock",
+    "Landfalls treatment",
+    "Landfalls shock"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+) %>% filter(category!="2010s")
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 4, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+```
+
+# Raw vs residualized
+
+```{r, message=FALSE, fig.width=6, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls = lp_controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_95",
+    "maxwind_treat",
+    "wind_cat1",
+    "wind_cat3"
+    
+  ),
+  label = c(
+    "1/20y Wind speed (raw)",
+    "1/20y Wind speed (residualized)",
+    "Tropical Cyclone (Cat1+)",
+    "Tropical Cyclone (Cat3+)"
+    
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 2, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+```
+
+```{r, fig.width=6, fig.height=5, message=FALSE}
+shocks <- c(
+  "maxwind_95",
+  "maxwind_treat",
+  "maxwind_sqkm_95",
+  "maxwind_sqkm_treat"
+)
+
+irfs_all <- shocks %>%
+  map_dfr(~ 
+    lp_panel(
+      data = data_tc,
+      outcome = "loggdp",
+      main_var = .x,
+      horizon = 12,
+      fe = "countrycode[year] + countrycode[year2] + year",
+      panel_id = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(term = .x)
+  )
+
+df_plot <- irfs_all %>%
+  mutate(
+    panel = ifelse(grepl("sqkm", term), "Max wind per sqkm", "Max wind"),
+    type  = ifelse(grepl("treat", term), "Residualized", "Raw")
+  )
+
+ggplot(df_plot, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up, fill = type),
+    alpha = 0.15
+  ) +
+  geom_line(
+    aes(color = type, linetype = type),
+    linewidth = 1.1
+  ) +
+  facet_wrap(~ panel, ncol = 2, scales = "free_x") +
+  scale_color_manual(values = c("Raw" = myblue, "Residualized" = myred)) +
+  scale_fill_manual(values = c("Raw" = myblue, "Residualized" = myred)) +
+  scale_linetype_manual(values = c("Raw" = "solid", "Residualized" = "dotdash")) +
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top"
+  )
+
+```
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+
+lp_outcome  <- "tfp"
+lp_horizon  <- 12
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "nlands_treat",
+    "energy_treat"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+```
+
+
+# Continent
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 15
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "continent"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_95",
+    "nlands_95",
+    "energy_95"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  #geom_ribbon(
+  #  aes(ymin = irf_down, ymax = irf_up),
+  #  alpha = 0.2, color = NA
+  #) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+```
+
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 15
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "continent"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls     = lp_controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat"
+  ),
+  label = c(
+    "1/20y Wind speed"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  # Zero line (softer)
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6, color = "grey40") +
+  
+  # Confidence band (optional, looks nice if you turn it back on)
+  # geom_ribbon(
+  #   aes(ymin = irf_down, ymax = irf_up),
+  #   alpha = 0.15,
+  #   color = NA
+  # ) +
+  
+  # Main IRF lines
+  geom_line(linewidth = 1.2) +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "Continent",
+    fill  = "Continent"
+  ) +
+  
+  # Percent axis with cleaner formatting
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  
+  # Wrap legend into multiple rows
+  guides(
+    color = guide_legend(nrow = 2, byrow = TRUE),
+    fill  = guide_legend(nrow = 2, byrow = TRUE)
+  ) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+ggsave("figures/irf_maxwindtreat_continent.png", dpi = 300)
+```
+
+
+
+
+```{r}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 12
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "countrycode"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov,
+    #controls      = lp_controls
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_95",
+    "maxwind_treat"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Wind speed (residualized)"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+) %>% filter( category %in% c("USA","JPN","DOM","PHL"))
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  # geom_ribbon(
+  #   aes(ymin = irf_down, ymax = irf_up),
+  #   alpha = 0.2, color = NA
+  # ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+```
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "countrycode"
+lp_controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov,
+    controls      = lp_controls
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat"
+  ),
+  label = c(
+    "1/20y Wind speed"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+) %>% filter( category %in% c("USA","JPN","DOM","PHL"))
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  # geom_ribbon(
+  #   aes(ymin = irf_down, ymax = irf_up),
+  #   alpha = 0.2, color = NA
+  # ) +
+  
+  geom_line(size = 1.1) +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "Country",
+    fill = "Country"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+ggsave("figures/irf_maxwindtreat_country.png", dpi = 300)
+```
+
+
+
+# TFP
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+outcomes <- c("loggdp", "tfp")
+
+irfs_all <- outcomes %>%
+  map_dfr(~ 
+    lp_panel(
+      data = data_tc,
+      outcome = .x,
+      main_var = "maxwind_treat",
+      #controls =paste0( "l(", .x, ",2)"),
+      horizon = 12,
+      fe = "countrycode[year] + countrycode[year2] + year",
+      panel_id = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(outcome = .x)
+  )
+ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up, fill = outcome),
+    alpha = 0.15
+  ) +
+  geom_line(
+    aes(color = outcome, linetype = outcome),
+    linewidth = 1.1
+  ) +
+
+  scale_color_manual(
+    values = c("loggdp" = myblue, "tfp" = myred),
+    labels = c("GDP per capita", "TFP")
+  ) +
+  scale_fill_manual(
+    values = c("loggdp" = myblue, "tfp" = myred),
+    labels = c("GDP per capita", "TFP")
+  ) +
+  scale_linetype_manual(
+    values = c("loggdp" = "solid", "tfp" = "dotdash"),
+    labels = c("GDP per capita", "TFP")
+  ) +
+
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+```
+
+
+
+```{r}
+
+lp_horizon  <- 12
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+shock_var   <- "maxwind_treat"
+
+run_lp <- function(outcome_name) {
+  lp_panel_inter(
+    data         = data_tc,
+    outcome      = outcome_name,
+    main_var     = shock_var,
+    interact_var = lp_interact,
+    horizon      = lp_horizon,
+    fe           = lp_fe,
+    panel_id     = lp_panel_id,
+    vcov_formula = lp_vcov,
+    #controls    =paste0("l(", outcome_name, ",2)")
+  ) %>%
+    mutate(outcome = outcome_name)
+}
+
+
+irfs_all <- c("loggdp", "tfp") %>% map_dfr(run_lp)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, color = NA) +
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ outcome, ncol = 2, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background  = element_blank(),
+    strip.text        = element_text(face = "bold"),
+    legend.position   = "top"
+  )
+```
+
+
+
+# Is it shaped by rich/poor
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+map_data <- left_join(world, data_tc, by = c("iso_a3" = "countrycode"))
+```
+
+```{r}
+ggplot(world) +
+  geom_sf(
+    data = map_data,
+    aes(fill = credit_bin),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  scale_fill_brewer(
+    palette = "Blues",
+    na.value = "grey",
+    name = "Domestic credit"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+
+
+ggplot(world) +
+  geom_sf(
+    data = map_data,
+    aes(fill = gdp_pc_bin),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  scale_fill_brewer(
+    palette = "Reds",
+    na.value = "grey",
+    name = "GDP PC",
+    direction = -1
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+
+ggplot(world) +
+  geom_sf(
+    data = map_data,
+    aes(fill = gdp_pc_group),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  scale_fill_brewer(
+    palette = "Reds",
+    na.value = "grey",
+    name = "GDP PC",
+    direction = -1
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+
+
+```
+
+
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 12
+lp_fe       <- "countrycode[time] + countrycode[time2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "gdp_pc_bin"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind",
+    "maxwind_sqkm",
+    "nlands",
+    "nlands_sqkm",
+    "energy",
+    "energy_sqkm"
+  ),
+  label = c(
+    "Wind exposure",
+    "Wind exposure / sq km",
+    "# Landfalls",
+    "# Landfalls / sq km",
+    "Energy exposure",
+    "Energy exposure / sq km"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc %>% filter(year>=1990)
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category_value, fill = category_value)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+
+
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "year + countrycode[year] + countrycode[year2]"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "gdp_pc_bin"
+controls <- "l(gdp_diff,1:2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls     = controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat"
+  ),
+  label = c(
+    "1/20y Wind speed"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc 
+) 
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "GDP group",
+    fill = "GDP group"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+ggsave("figures/irf_gdp_pc_groups_wind.png", dpi = 300)
+
+```
+
+
+```{r}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "year + countrycode[year] + countrycode[year2]"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "gdp_pc_bin"
+controls <- NULL
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls     = controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "nlands_treat",
+    "energy_treat"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc 
+) %>% filter(shock =="1/20y Wind speed")
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "GDP group",
+    fill = "GDP group"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+```
+
+
+
+
+
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 15
+lp_fe       <- "year + countrycode[year] + countrycode[year2]"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "credit_bin"
+controls <- NULL
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    controls     = controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "nlands_treat",
+    "energy_treat"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+
+```
+
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "gdp_pc_group"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "nlands_treat",
+    "energy_treat"
+  ),
+  label = c(
+    "1/20y Wind speed",
+    "1/20y Landfalls",
+    "1/20y Energy"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc 
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+
+
+# ROBUSTNESS
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+controls <-c("0", "l(gdp_diff,1:2)", "l(gdp_diff,1:4)")
+
+irfs_all <- controls %>%
+  map_dfr(~ 
+    lp_panel(
+      data = data_tc,
+      outcome = "loggdp",
+      main_var = "maxwind_treat",
+      controls = .x,
+      horizon = 12,
+      fe = "countrycode[year] + countrycode[year2] + year",
+      panel_id = c("countrycode", "year"),
+      vcov_formula = DK ~ year
+    ) %>%
+      mutate(control = .x)
+  )
+ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up, fill = control),
+    alpha = 0.15
+  ) +
+  geom_line(
+    aes(color = control, linetype = control),
+    linewidth = 1.1
+  ) +
+
+
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+```
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+irf_ols <- lp_panel_inter(
+  data = data_tc,
+  outcome = "loggdp",
+  main_var = "maxwind_treat",
+  fe = "countrycode[year] + countrycode[year2] + year",
+  panel_id = c("countrycode", "year"),
+  vcov_formula = DK ~ year,
+  interact_var = "period"
+)
+
+irf_iv <- lp_panel_inter(
+  data = data_tc,
+  outcome = "loggdp",
+  main_var = "maxwind_treat",
+  interact_var = "period",
+  controls = "l(gdp_diff,1:2)",
+  fe = "countrycode[year] + countrycode[year2] + year",
+  panel_id = c("countrycode", "year"),
+  vcov_formula = DK ~ year
+
+)
+
+irfs_all <- bind_rows(
+  irf_ols %>% mutate(type = "Main"),
+  irf_iv  %>% mutate(type = "Lag-augmented")
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category, linetype = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15) +
+  geom_line(linewidth = 1.1) +
+  facet_wrap(~ type) +
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "Period", fill = "Period", linetype = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+
+```
+
+
+
+
+
+
+```{r, message=FALSE, fig.width=5, fig.height=5}
+shocks <- c("maxwind_treat", "maxwind_treat_year")
+
+# Compute IRFs
+irfs_all <- map_dfr(shocks, ~ 
+  lp_panel(
+    data = data_tc,
+    outcome = "loggdp",
+    main_var = .x,
+    horizon = 12,
+    #controls="l(loggdp,2)",
+    fe = "countrycode[year] + countrycode[year2] + year",
+    panel_id = c("countrycode", "year"),
+    vcov_formula = DK ~ year
+  ) %>%
+    mutate(shock = .x)
+)
+
+
+# Plot
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = shock, fill = shock, linetype = shock)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15) +
+  geom_line(linewidth = 1.1) +
+  labs(
+    x = "Horizon (years)",
+    y = "GDP growth",
+    color = "", fill = "", linetype = ""
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "top",
+    axis.title = element_text(face = "bold")
+  )
+
+ggsave("figures/robust_treatment.png", dpi = 300)
+```
+
+
+
+```{r, message=FALSE, fig.width=6, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = "maxwind_treat",
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov,
+    controls      = main_var
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "0",
+    "l(gdp_diff,2)",
+    "l(gdp_diff,2:5)",
+    "l(gdp_diff,2:10)"
+  ),
+  label = c(
+    "None",
+    "1 lag of dGDP ",
+    "4 lags of dGDP",
+    "9 lags of dGDP"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 2, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  ylim(-0.07,0.07) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+
+
+```{r, message=FALSE, fig.width=10, fig.height=5}
+interact_map <- tibble::tibble(
+  interact_var = c("period90", "period91", "period92", "period89", "period88"),
+  interact_lbl = c("1990", "1991", "1992", "1989", "1988")
+)
+run_lp <- function(data, interact_var, interact_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = "maxwind_treat",
+    interact_var  = interact_var,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov,
+    controls      = NULL
+  ) %>%
+    mutate(interaction = interact_label)
+}
+irfs_all <- purrr::pmap_dfr(
+  list(interact_map$interact_var, interact_map$interact_lbl),
+  run_lp,
+  data = data_tc
+)
+ggplot(irfs_all,
+       aes(x = horizon, y = irf_mean,
+           color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ interaction, ncol = 5) +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill  = "Period"
+  ) +
+  
+  ylim(-0.07, 0.07) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+
+
+```{r, message=FALSE, fig.width=8, fig.height=5}
+
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- "l(loggdp,2)"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov,
+    #controls      = lp_controls
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "maxwind_treat",
+    "maxwind_sqkm_treat",
+    "nlands_treat",
+    "nlands_sqkm_treat",
+    "energy_treat",
+    "energy_sqkm_treat"
+  ),
+  label = c(
+    "Wind speed",
+    "Wind speed / sq km",
+    "# Landfalls",
+    "# Landfalls / sq km",
+    "Energy exposure",
+    "Energy exposure / sq km"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_tc
+)
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_x") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  ylim(-0.07,0.07) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+
+ggsave("figures/robust_measure.png", dpi = 300)
+
+```
+
+
+
+
+```{r, message=FALSE}
+
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 12
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- NULL
+
+# ----------------------------
+# Full-sample IRF
+# ----------------------------
+irf_full <- lp_panel_inter(
+  data = data_tc,
+  outcome = lp_outcome,
+  main_var = lp_shock,
+  interact_var = lp_interact,
+  horizon = lp_horizon,
+  controls = lp_controls,
+  fe = lp_fe,
+  panel_id = lp_panel_id,
+  vcov_formula = lp_vcov
+) %>%
+  mutate(
+    loo_type = "Full sample",
+    left_out = NA_character_
+  )
+
+# ----------------------------
+# Leave-one-country-out IRFs
+# ----------------------------
+loo_country <- data_tc %>%
+  split(.$countrycode) %>%
+  imap_dfr(~ {
+    df <- data_tc %>% filter(countrycode != .y)
+    lp_panel_inter(
+      data = df,
+      outcome = lp_outcome,
+      main_var = lp_shock,
+      interact_var = lp_interact,
+      controls = lp_controls,
+      horizon = lp_horizon,
+      fe = lp_fe,
+      panel_id = lp_panel_id,
+      vcov_formula = lp_vcov
+    ) %>%
+      mutate(loo_type = "Leave-one-country", left_out = .y)
+  })
+
+# ----------------------------
+# Leave-one-year-out IRFs
+# ----------------------------
+loo_year <- data_tc %>%
+  split(.$year) %>%
+  imap_dfr(~ {
+    df <- data_tc %>% filter(year != .y)
+    lp_panel_inter(
+      data = df,
+      outcome = lp_outcome,
+      main_var = lp_shock,
+      interact_var = lp_interact,
+      controls = lp_controls,
+      horizon = lp_horizon,
+      fe = lp_fe,
+      panel_id = lp_panel_id,
+      vcov_formula = lp_vcov
+    ) %>%
+      mutate(loo_type = "Leave-one-year", left_out = .y)
+  })
+
+# ----------------------------
+# Combine all for plotting
+# ----------------------------
+irf_plot_df <- bind_rows(irf_full, loo_country, loo_year) %>%
+  mutate(loo_type = factor(loo_type, levels = c("Leave-one-country", "Leave-one-year", "Full sample")))
+
+
+```
+
+```{r, fig.width=6, fig.height=5}
+# ----------------------------
+# Separate dataframes
+# ----------------------------
+
+# Full-sample IRFs
+full_sample <- irf_plot_df %>% filter(loo_type == "Full sample")
+
+# LOO by country
+loo_country <- irf_plot_df %>% 
+  filter(loo_type == "Leave-one-country") %>%
+  # Add full-sample IRF for overlay
+  bind_rows(full_sample %>% mutate(loo_type = "Leave-one-country")) %>%
+  arrange(left_out)
+
+# LOO by year
+loo_year <- irf_plot_df %>% 
+  filter(loo_type == "Leave-one-year") %>%
+  # Add full-sample IRF for overlay
+  bind_rows(full_sample %>% mutate(loo_type = "Leave-one-year")) %>%
+  arrange(left_out)
+
+# ----------------------------
+# Plot function
+# ----------------------------
+plot_loo <- function(df, title) {
+  ggplot(df) +
+    # Full-sample IRFs (colored ribbons + lines)
+    geom_ribbon(
+      data = df %>% filter(left_out %>% is.na()), # full sample
+      aes(x = horizon, ymin = irf_down, ymax = irf_up, fill = category),
+      alpha = 0.2, color = NA
+    ) +
+    
+      # LOO IRFs (thin black lines)
+    geom_line(
+      data = df %>% filter(!is.na(left_out)),
+      aes(x = horizon, y = irf_mean, group = interaction(left_out, category)),
+      color = "black",
+      size = 0.2,
+      alpha = 0.6
+    ) +
+    geom_line(
+      data = df %>% filter(left_out %>% is.na()), # full sample
+      aes(x = horizon, y = irf_mean, color = category),
+      size = 1.3
+    ) +
+
+    geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+    labs(
+      x = "Horizon (years)",
+      y = "Cumulative IRF of GDP per capita",
+      title = title,
+      color = "Period",
+      fill  = "Period"
+    ) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    theme_classic(base_size = 14) +
+    theme(
+      strip.text = element_text(face = "bold"),
+      legend.position = "top"
+    )
+}
+
+# ----------------------------
+# Generate plots
+# ----------------------------
+p_loo_country <- plot_loo(loo_country, "")
+p_loo_year    <- plot_loo(loo_year, "")
+
+# Display
+p_loo_country
+ggsave("figures/robust_loo_country.png", plot = p_loo_country, dpi = 300)
+p_loo_year
+ggsave("figures/robust_loo_year.png", plot = p_loo_year, dpi = 300)
+```
+
+
+```{r, message=FALSE, fig.width=12, fig.height=5}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 10
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period"
+lp_controls <- NULL
+
+fe_specs <- tibble(
+  fe_label = c("Country + Year + Quad. Trend", " Country + Year + Lin. Trend", "Country + Year + ContinentxYear + Quad. Trend"),
+  fe_var   = c("countrycode[year] + countrycode[year2] + year",
+               "countrycode[year] + year",
+               "countrycode[year] + countrycode[year2] + continent^year")
+)
+
+shock_map <- tibble(
+  main_var   = "maxwind_treat",
+  shock_label = "1/20y Wind speed"
+)
+
+run_lp_fe <- function(fe_var, fe_label) {
+  lp_panel_inter(
+    data          = data_tc,
+    outcome       = lp_outcome,
+    main_var      = shock_map$main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = fe_var,
+    panel_id      = lp_panel_id,
+    controls      = lp_controls,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(fe_label = fe_label)
+}
+
+
+irfs_all <- fe_specs %>%
+  pmap_dfr(~ run_lp_fe(..2, ..1))  # ..1 = fe_label, ..2 = fe_var
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.2, color = NA) +
+  geom_line(size = 1.1) +
+  facet_wrap(~ fe_label, ncol = 3, scales = "free_x") +
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+
+ggsave("figures/robust_fe.png", dpi = 300)
+```
+
+
+
+```{r, message=FALSE, fig.width=6, fig.height=5}
+# ----------------------------
+# LP settings
+# ----------------------------
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_interact <- "period"
+lp_controls <- NULL #"l(loggdp,2)"
+
+# ----------------------------
+# Run main IRF (DK SE)
+# ----------------------------
+irf_dk <- lp_panel_inter(
+  data          = data_tc,
+  outcome       = lp_outcome,
+  main_var      = lp_shock,
+  interact_var  = lp_interact,
+  horizon       = lp_horizon,
+  fe            = lp_fe,
+  panel_id      = lp_panel_id,
+  controls      = lp_controls,
+  vcov_formula  = DK ~ year
+) %>%
+  mutate(se_type = "DK")
+
+# ----------------------------
+# Run IRF with clustered SEs (no fill)
+# ----------------------------
+irf_cluster <- lp_panel_inter(
+  data          = data_tc,
+  outcome       = lp_outcome,
+  main_var      = lp_shock,
+  interact_var  = lp_interact,
+  horizon       = lp_horizon,
+  fe            = lp_fe,
+  panel_id      = lp_panel_id,
+  controls      = lp_controls,
+  vcov_formula  = cluster ~ countrycode +year
+) %>%
+  mutate(se_type = "Clustered")
+
+# ----------------------------
+# Combine for plotting
+# ----------------------------
+irf_plot <- bind_rows(
+  irf_dk,
+  irf_cluster
+)
+
+# ----------------------------
+# Plot
+# ----------------------------
+ggplot() +
+  # DK ribbon (filled)
+  geom_ribbon(
+    data = irf_plot %>% filter(se_type == "DK"),
+    aes(x = horizon, ymin = irf_down, ymax = irf_up, fill = category),
+    alpha = 0.15
+  ) +
+  # Clustered CI (no fill, black line)
+  geom_ribbon(
+    data = irf_plot %>% filter(se_type == "Clustered"),
+    aes(x = horizon, ymin = irf_down, ymax = irf_up, color = category),
+    fill = NA, linetype = "dashed", size = 1
+  ) +
+  # Mean line (from DK)
+  geom_line(
+    data = irf_dk,
+    aes(x = horizon, y = irf_mean, color = category),
+    size = 1.1
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  labs(
+    x = "Horizon (years)",
+    y = " GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "top")
+
+ggsave("figures/robust_se.png", dpi = 300)
+```
+
+
+```{r, fig.width=5, fig.height=5,message=FALSE}
+# ----------------------------
+# LP settings
+# ----------------------------
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 8
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "period3"
+lp_controls <- NULL #"l(loggdp,2)"
+
+# ----------------------------
+# Run LP
+# ----------------------------
+irf_df <- lp_panel_inter(
+  data         = data_tc,
+  outcome      = lp_outcome,
+  main_var     = lp_shock,
+  interact_var = lp_interact,
+  horizon      = lp_horizon,
+  fe           = lp_fe,
+  panel_id     = lp_panel_id,
+  controls     = lp_controls,
+  vcov_formula = lp_vcov
+)
+
+# ----------------------------
+# Top plot: IRFs
+# ----------------------------
+p_irf <- ggplot(irf_df, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up, color = category, fill = category), alpha = 0.15, color = NA) +
+  geom_line(size = 1.1, aes(color = category, fill = category)) +
+  labs(
+    x = "",
+    y = "% GDP variation",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+# ----------------------------
+# Bottom plot: maxwind_95 density by period
+# ----------------------------
+data_tc_hist <- data_tc %>%
+  filter(maxwind > 0) %>%
+  mutate(period = ifelse(year <= 1984, "1970-1984", ifelse(year <=1999, "1985-1999", "2000-2014"))) %>%
+  group_by(year) %>%
+  summarise(
+    maxwind_treat = sum(maxwind_95, na.rm = TRUE),
+    period = first(period)
+  )
+
+p_hist <- ggplot(
+  data_tc_hist,
+  aes(x = maxwind_treat, y = period, color = period)
+) +
+  geom_jitter(
+    height = 0.18,
+    alpha = 0.9,
+    size = 1
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    size = 2.5,
+    color = "black"
+  ) +
+  labs(
+    x = "# of extreme events per year",
+    y = ""
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(face = "bold")
+  ) +
+  #add integer breaks to x axis
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
+
+
+# ----------------------------
+# Combine top and bottom
+# ----------------------------
+p_irf / p_hist + plot_layout(heights = c(3, 1))
+
+ggsave("figures/robust_period.png", dpi = 300)
+
+```
+
+
+```{r, fig.width=6, fig.height=5,message=FALSE}
+# ----------------------------
+# LP settings
+# ----------------------------
+lp_outcome  <- "loggdp"
+lp_shock    <- "maxwind_treat"
+lp_horizon  <- 8
+lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_panel_id <- c("countrycode", "year")
+lp_vcov     <- DK ~ year
+lp_interact <- "decade"
+lp_controls <- NULL #"l(loggdp,2)"
+
+# ----------------------------
+# Run LP
+# ----------------------------
+irf_df <- lp_panel_inter(
+  data         = data_tc,
+  outcome      = lp_outcome,
+  main_var     = lp_shock,
+  interact_var = lp_interact,
+  horizon      = lp_horizon,
+  fe           = lp_fe,
+  panel_id     = lp_panel_id,
+  controls     = lp_controls,
+  vcov_formula = lp_vcov
+)
+
+# ----------------------------
+# Top plot: IRFs
+# ----------------------------
+p_irf <- ggplot(irf_df, aes(x = horizon, y = irf_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up, color = category, fill = category), alpha = 0.1, color = NA) +
+  geom_line(size = 1.1, aes(color = category, fill = category)) +
+  labs(
+    x = "",
+    y = "% GDP variation",
+    color = "Period",
+    fill = "Period"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  theme_classic(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "top",
+    strip.text = element_text(face = "bold")
+  )
+
+# ----------------------------
+# Bottom plot: maxwind_95 density by period
+# ----------------------------
+data_tc_hist <- data_tc %>%
+  filter(maxwind > 0) %>%
+  mutate(decade = case_when(
+    year >= 1970 & year <= 1979 ~ "1970s",
+    year >= 1980 & year <= 1989 ~ "1980s",
+    year >= 1990 & year <= 1999 ~ "1990s",
+    year >= 2000 & year <= 2009 ~ "2000s",
+    year >= 2010 & year <= 2019 ~ "2010s"
+  )) %>%
+  group_by(year) %>%
+  summarise(
+    maxwind_treat = sum(maxwind_95, na.rm = TRUE),
+    period = first(decade)
+  )
+
+p_hist <- ggplot(
+  data_tc_hist,
+  aes(x = maxwind_treat, y = period, color = period)
+) +
+  geom_jitter(
+    height = 0.18,
+    alpha = 0.9,
+    size = 1
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    size = 2.5,
+    color = "black"
+  ) +
+  labs(
+    x = "# of extreme events per year",
+    y = ""
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(face = "bold")
+  ) +
+  #add integer breaks to x axis
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
+
+
+# ----------------------------
+# Combine top and bottom
+# ----------------------------
+p_irf / p_hist + plot_layout(heights = c(3, 1))
+
+ggsave("figures/robust_decade.png", dpi = 300)
+
+```
+
+
+
+# MAPS
+
+```{r}
+
+data_tc_filtered <- data_tc %>%
+  group_by(countrycode) %>%
+  filter(max(maxwind, na.rm = TRUE) > 0 | max(nlands, na.rm = TRUE) > 0) %>%
+  ungroup()
+
+
+ggplot(
+  ne_countries(scale = "medium", returnclass = "sf") %>%
+    left_join(
+      data_tc_filtered %>%
+        group_by(countrycode) %>%
+        summarise(mean_maxwind = mean(maxwind, na.rm = TRUE)),
+      by = c("iso_a3" = "countrycode")
+    )
+) +
+  geom_sf(aes(fill = mean_maxwind), color = "white", size = 0.1) +
+  scale_fill_distiller(
+    palette = "YlOrRd",
+    direction = 1,
+    na.value = "grey90",
+    name = " Max Wind Speed (m/s)"
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_maxwind.png", width = 8, height = 5)
+
+
+ggplot(
+  ne_countries(scale = "medium", returnclass = "sf") %>%
+    left_join(
+      data_tc_filtered %>%
+        group_by(countrycode) %>%
+        summarise(n_landfalls = mean(nlands, na.rm = TRUE)),
+      by = c("iso_a3" = "countrycode")
+    )
+) +
+  geom_sf(aes(fill = n_landfalls), color = "white", size = 0.1) +
+  scale_fill_gradientn(
+    colors = c("darkblue", RColorBrewer::brewer.pal(9, "YlOrRd")),
+    values = scales::rescale(
+      c(
+        0,
+        min(data_tc_filtered$nlands[data_tc_filtered$nlands > 0], na.rm = TRUE),
+        max(data_tc_filtered$nlands, na.rm = TRUE)
+      )
+    ),
+    na.value = "grey90",
+    name = "# Landfalls"
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_nlandfalls.png", width = 8, height = 5)
+
+
+ggplot(
+  ne_countries(scale = "medium", returnclass = "sf") %>%
+    left_join(
+      data_tc %>%
+        group_by(countrycode) %>%
+        summarise(gdp = mean(loggdp, na.rm = TRUE)),
+      by = c("iso_a3" = "countrycode")
+    )
+) +
+  geom_sf(aes(fill = gdp), color = "white", size = 0.1) +
+  scale_fill_gradientn(
+    colors = c("darkblue", RColorBrewer::brewer.pal(9, "Spectral")),
+    values = scales::rescale(
+      c(
+        min(data_tc$gdp, na.rm = TRUE),
+        max(data_tc$gdp, na.rm = TRUE)
+      )
+    ),
+       #labels = scales::percent_format(accuracy = 0.1), # <-- display as %
+    na.value = "grey90",
+    name = "log GDP pc"
+  ) +
+  #robinson proj
+  coord_sf(crs = "+proj=robin") +
+  theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_gdp.png", width = 8, height = 5)
+
+
+```
+
+
+
+# R2 per Horizon
+
+```{r, message=FALSE}
+results <- list()
+for (h in 0:10) {
+
+  m_base <- feols(
+    f(loggdp, h) - l(loggdp, 1) ~ 
+      maxwind_shock + l(gdp_diff, 1:2) |
+      countrycode[year] + year,
+    data = data_tc,
+    panel.id = c("countrycode", "year"),
+    vcov = DK ~ year
+  )
+
+  m_y2 <- update(m_base, . ~ . | . + countrycode[year2])
+  m_y3 <- update(m_base, . ~ . | . + countrycode[year3])
+
+  results[[h + 1]] <- tibble(
+    horizon = h,
+    model   = c("Linear", "Poly2", "Poly3"),
+    r2      = c(as.numeric(fitstat(m_base, "cor2")),
+                as.numeric(fitstat(m_y2, "cor2")),
+                as.numeric(fitstat(m_y3, "r2"))),
+    aic     = c(AIC(m_base), AIC(m_y2), AIC(m_y3)),
+    bic     = c(BIC(m_base), BIC(m_y2), BIC(m_y3))
+  )
+}
+model_comp <- bind_rows(results)
+model_comp_wide <- model_comp %>%
+  pivot_wider(
+    id_cols = horizon,
+    names_from = model,
+    values_from = c(r2, aic, bic),
+    names_glue = "{model}_{.value}"
+  ) %>%
+  arrange(horizon)
+
+model_comp_wide
+```
+
+
+
+
+
+# Maps of Damages and Recovery
+
+
+```{r}
+
+data_tclags <- data_tc %>%
+  group_by(countrycode) %>%
+  arrange(year) %>%
+  mutate(
+    maxwind_treat_l0 = maxwind_treat,
+    maxwind_treat_l1 = lag(maxwind_treat, 1),
+    maxwind_treat_l2 = lag(maxwind_treat, 2),
+    maxwind_treat_l3 = lag(maxwind_treat, 3),
+    maxwind_treat_l4 = lag(maxwind_treat, 4),
+    maxwind_treat_l5 = lag(maxwind_treat, 5),
+    maxwind_treat_l6 = lag(maxwind_treat, 6),
+    maxwind_treat_l7 = lag(maxwind_treat, 7),
+    maxwind_treat_l8 = lag(maxwind_treat, 8),
+    maxwind_treat_l9 = lag(maxwind_treat, 9),
+    maxwind_treat_l10 = lag(maxwind_treat, 10)) %>% 
+  ungroup()
+
+dl_model <- feols(
+  loggdp ~ i(countrycode, maxwind_treat_l0) + 
+    i(countrycode, maxwind_treat_l1) +
+    i(countrycode, maxwind_treat_l2) +
+    i(countrycode, maxwind_treat_l3) +
+    i(countrycode, maxwind_treat_l4) +
+    i(countrycode, maxwind_treat_l5) +
+    i(countrycode, maxwind_treat_l6) +
+    i(countrycode, maxwind_treat_l7) +
+    i(countrycode, maxwind_treat_l8) +
+    i(countrycode, maxwind_treat_l9) +
+    i(countrycode, maxwind_treat_l10)  | countrycode[year] + countrycode[year2] + year,
+  data = data_tclags,
+  panel.id = c("countrycode", "year"),
+  vcov = DK ~ year
+)
+
+coef_df <- data.frame(
+  term     = names(coef(dl_model)),
+  estimate = coef(dl_model)
+) %>%
+  filter(str_detect(term, "::")) %>%
+  mutate(
+    country = str_match(term, ".*::(.*?):")[, 2],
+    lag     = as.integer(str_match(term, "maxwind_treat_l([0-9]+)")[, 2])
+  ) %>%
+  arrange(country, lag)
+
+irfs <- coef_df %>%
+  group_by(country) %>%
+  arrange(lag) %>%
+  mutate(
+    estimate = cumsum(estimate)   # IRF at each lag h
+  ) %>%
+  ungroup()
+
+irf_recovery <- irfs %>%
+  group_by(country) %>%
+  arrange(lag) %>%
+  dplyr::summarize(
+    first_below_zero = ifelse(any(estimate < 0), min(lag[estimate < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(estimate < 0) & any(estimate >= 0 & lag > min(lag[estimate < 0])),
+      min(lag[estimate >= 0 & lag > min(lag[estimate < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ 0,      # never goes below 0
+      is.na(first_back_to_zero) ~ H + 1, # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop"
+  )
+
+# join with world map
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery, by = c("iso_a3" = "country"))
+
+# define discrete colors
+colors <- RColorBrewer::brewer.pal(9, "YlOrRd")
+breaks <- c(0, 1, 2, 3, 5, 7, 10, 12)
+labels <- c("0", "1", "2", "3", "5", "7", "10", "10+")
+
+ggplot(world_joined) +
+  geom_sf(aes(fill = recovery_time), color = "white", linewidth = 0.1) +
+  scale_fill_stepsn(
+    colours = colors,
+    breaks  = breaks,
+    limits  = c(0, 12),
+    labels  = labels,
+    na.value = "grey90",
+    name = "Years to Recovery",
+    guide = guide_colorsteps(
+      barheight = unit(3.5, "cm"),
+      barwidth  = unit(0.6, "cm"),
+      show.limits = TRUE,
+      title.position = "top"
+    )
+  ) +
+  coord_sf(crs = "+proj=robin") +  # Robinson projection
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    legend.direction = "vertical",
+    panel.grid = element_blank()
+  )
+
+ggsave("figures/map_recovery_time_DL.png", width = 8, height = 5, dpi = 300)
+```
+
+
+```{r}
+H <- 10
+irf_list <- list()
+
+for (h in 0:H) {
+  fe_model <- feols(
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_treat) |
+      countrycode[year] + countrycode[year2] + year,
+    data = data_tc,
+    panel.id = c("countrycode", "year"),
+    vcov = DK ~ year
+  )
+  
+  coef_df <- data.frame(
+    horizon  = h,
+    term     = names(coef(fe_model)),
+    estimate = coef(fe_model)
+  )
+  
+  coef_df <- coef_df %>%
+    filter(str_detect(term, "::")) %>%
+    mutate(
+      country = str_match(term, ".*::(.*?):.*")[, 2]
+    )
+  
+  irf_list[[h + 1]] <- coef_df
+}
+
+irfs <- bind_rows(irf_list)
+
+
+irf_recovery <- irfs %>%
+  group_by(country) %>%
+  arrange(horizon) %>%
+  dplyr::summarize(
+    first_below_zero = ifelse(any(estimate < 0), min(horizon[estimate < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(estimate < 0) & any(estimate >= 0 & horizon > min(horizon[estimate < 0])),
+      min(horizon[estimate >= 0 & horizon > min(horizon[estimate < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ -1,      # never goes below 0
+      is.na(first_back_to_zero) ~ H + 1, # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop"
+  )
+
+
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery, by = c("iso_a3" = "country"))
+
+
+colors <- RColorBrewer::brewer.pal(9, "YlOrRd")
+breaks <- c(0, 1, 2, 3, 5, 7, 10, 12)
+labels <- c("0", "1", "2", "3", "5", "7", "10", "10+")
+
+
+ggplot(world_joined) +
+  geom_sf(aes(fill = recovery_time), color = "white", linewidth = 0.1) +
+  
+  scale_fill_stepsn(
+    colours = colors,
+    breaks  = breaks,
+    limits  = c(0, 12),
+    labels  = labels,
+    na.value = "grey90",
+    name = "Years to Recovery",
+    guide = guide_colorsteps(
+      barheight = unit(3.5, "cm"),
+      barwidth  = unit(0.6, "cm"),
+      show.limits = TRUE,
+      title.position = "top"
+    )
+  ) +
+  
+  coord_sf(crs = "+proj=robin") +  # Robinson projection
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    legend.direction = "vertical",
+    panel.grid = element_blank()
+  )
+
+# Save figure
+ggsave("figures/map_recovery_time_LP.png", width = 8, height = 5, dpi = 300)
+```
+
+
+
+
+
+```{r}
+H <- 5  # horizon
+irf_list <- list()
+
+for (h in 0:H) {
+  
+  
+  # FE model with interaction between maxwind_sqkm and country
+  fe_model <- feols(
+    f(loggdp,h) - l(loggdp,1)  ~ i(countrycode,maxwind_treat)  | countrycode[year] + countrycode[year2]  + year,
+    data = data_tc, panel.id = c("countrycode", "year"),
+    vcov = DK ~ year
+  )
+  
+  # Extract coefficients and SEs
+  coef_df <- data.frame(
+    horizon = h,
+    term = names(coef(fe_model)),
+    estimate = coef(fe_model),
+    se = sqrt(diag(vcov(fe_model)))
+  )
+  
+  # Keep only interaction terms of the form i(countrycode, maxwind_sqkm)
+  coef_df <- coef_df %>%
+    filter(str_detect(term, "::")) %>%
+    mutate(
+      country = str_match(term, ".*::(.*?):.*")[,2]
+    )
+  
+  irf_list[[h + 1]] <- coef_df
+}
+
+# Combine all horizons
+irfs <- bind_rows(irf_list)
+
+irf_extreme <- irfs %>%
+  group_by(country) %>%
+  slice_min(order_by = estimate, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(
+    lower = estimate - 1.96 * se,
+    upper = estimate + 1.96 * se,
+    sig = ifelse(lower > 0 | upper < 0, "significant", "nonsignificant")
+  )
+
+
+# Join with world map
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_extreme, by = c("iso_a3" = "country"))
+
+labels <- c(
+  "-10%", "-7.5%", "-5%", "-2.5%", "0%",
+  "2.5%", "5%", "7.5%", "10%"
+)
+
+breaks <- seq(-0.10, 0.10, by = 0.025)
+
+ggplot(world_joined) +
+  geom_sf(aes(fill = estimate), color = "white", linewidth = 0.1) +
+  
+  scale_fill_stepsn(
+    colours = scales::brewer_pal(type = "div", palette = "RdBu")(9),
+    breaks  = breaks,
+    limits  = c(-0.10, 0.10),
+    labels  = labels,
+    oob     = scales::squish,
+    name    = "GDP growth"
+  ) +
+  
+  theme_minimal(base_size = 15) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text  = element_text(size = 11),
+    panel.grid = element_blank()
+  ) +
+  
+  guides(
+    fill = guide_colorsteps(
+      barheight = unit(5, "cm"),
+      barwidth  = unit(0.8, "cm"),
+      ticks = TRUE,
+      frame.colour = "black"
+    )
+  )
+
+ggsave("figures/map_h5.png", dpi = 300)
+```
+
+
+
+
+
+```{r}
+
+H <- 10 # horizon
+irf_list <- list()
+
+# Step 1: Estimate IRFs for each horizon
+for (h in 0:H) {
+  fe_model <- feols(
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_treat)  |
+      countrycode[year] + countrycode[year2] + year ,
+    data = data_tc,
+    panel.id = c("countrycode", "year"),
+    vcov = DK ~ year
+  )
+  
+  coef_df <- data.frame(
+    horizon  = h,
+    term     = names(coef(fe_model)),
+    estimate = coef(fe_model)
+  )
+  
+  # Keep only interaction terms
+  coef_df <- coef_df %>%
+    filter(str_detect(term, "::")) %>%
+    mutate(
+      country = str_match(term, ".*::(.*?):.*")[, 2]
+    )
+  
+  irf_list[[h + 1]] <- coef_df
+}
+
+# Step 2: Combine into one data frame
+irfs <- bind_rows(irf_list)
+
+# Step 3: Compute recovery time based on mean IRF crossing zero
+irf_recovery <- irfs %>%
+  group_by(country) %>%
+  arrange(horizon) %>%
+  dplyr::summarize(
+    first_below_zero = ifelse(any(estimate < 0), min(horizon[estimate < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(estimate < 0) & any(estimate >= 0 & horizon > min(horizon[estimate < 0])),
+      min(horizon[estimate >= 0 & horizon > min(horizon[estimate < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ -1,  # never goes below 0
+      is.na(first_back_to_zero) ~ H+1,  # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop"
+  )
+
+# Step 4: Join with world map
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery, by = c("iso_a3" = "country"))
+
+world_joined <- world_joined %>%
+  mutate(recovery_bin = case_when(
+    is.na(recovery_time)        ~ NA_character_,
+    recovery_time == H+1       ~ "Never recovers",
+    recovery_time <= 0         ~ "0",
+    recovery_time <= 5         ~ "1–5",
+    recovery_time <= 10        ~ "6–10",
+    recovery_time <= 15        ~ "11–15",
+    recovery_time <= 20        ~ "16–20",
+    TRUE                       ~ "20+"
+  )) %>%
+  mutate(recovery_bin = factor(
+    recovery_bin,
+    levels = c("0", "1–5", "6–10", "11–15", "16–20", "20+", "Never recovers")
+  ))
+
+cols <- c(
+  "0"             = "#0b6f6b",   # dark teal
+
+  "1–5"           = "#f1cc4e",   # strong yellow
+  "6–10"          = "#f39c12",   # orange
+  "11–15"         = "#e67e22",   # deep orange
+  "16–20"         = "#d35400",   # red-orange
+  "20+"           = "#8e2a1f",   # dark red
+
+  "Never recovers"= "black"
+)
+
+ggplot(world_joined) +
+  geom_sf(aes(fill = recovery_bin), color = "white", linewidth = 0.1) +
+  
+  scale_fill_manual(
+    values   = cols,
+    name     = "Recovery time (years)",
+    na.value = "grey80",
+    drop     = FALSE
+  ) +
+  
+  theme_minimal(base_size = 15) +
+  theme(
+    legend.position = "right",
+
+    # Make legend slimmer
+    legend.key.width  = unit(0.6, "cm"),
+    legend.key.height = unit(0.45, "cm"),
+
+    # Give more room to the map
+    plot.margin = margin(5, 20, 5, 5),
+
+    legend.title = element_text(face = "bold"),
+    legend.text  = element_text(size = 11),
+    panel.grid = element_blank()
+  ) +
+  
+  guides(
+    fill = guide_legend(
+      ncol = 1,
+      byrow = TRUE,
+      keywidth  = unit(0.6, "cm"),
+      keyheight = unit(0.45, "cm")
+    )
+  )
+ggsave("figures/map_recovery_time.png", dpi = 300)
+```
+
+
+
+
+# GLOBAL MICRO
+
+```{r}
+data_1deg <- read_csv("processed data/gdp_tc_0_5deg.csv") 
+
+data_1deg <- data_1deg %>%
+  mutate(
+    year2 = year^2,
+    latlon = paste0(lat, "_", lon)
+  ) %>%
+filter(
+  is.finite(wind)
+) %>% 
+filter(!is.na(wind)) %>% 
+  #drop 2020 and 2021 because of covid
+filter(year <= 2019)
+
+data_1deg <- data_1deg %>%
+  mutate(
+    wind_p90 = quantile(wind, 0.90, na.rm = TRUE),
+    wind_90 = ifelse(wind >= wind_p90, 1, 0),
+    wind_10ms = ifelse(wind >= 10, 1, 0),
+    wind_21ms = ifelse(wind >= 21, 1, 0)
+  ) %>%
+  ungroup()
+
+make_shock <- function(
+  data,
+  var,
+  p = 0.95,
+  baseline_start = 1979,
+  baseline_end   = 2020
+) {
+
+fe_model <- feols(
+  fml = as.formula(paste0(var, " ~ 0 | latlon + year")),
+  data    = data
+)
+
+  shock_name <- paste0(var, "_shock")
+  treat_name <- paste0(var, "_treat")
+  treat_forever_name <- paste0(var, "_treat_forever")
+  first_treat_name <- paste0(var, "_first_treat_year")
+  thresh_name <- paste0(shock_name, "_p")
+
+  data[[shock_name]] <- resid(fe_model)
+
+  # 🔹 GLOBAL threshold across all countries (baseline window only)
+  global_thresh <- quantile(
+    data[[shock_name]][
+      data$year >= baseline_start & data$year <= baseline_end
+    ],
+    p,
+    na.rm = TRUE
+  )
+
+  data <- data %>%
+    group_by(latlon) %>%
+    mutate(
+
+      # same threshold for everyone
+      !!thresh_name := global_thresh,
+
+      # treatment defined using global threshold
+      !!treat_name := as.integer(
+        .data[[shock_name]] >= global_thresh
+      ),
+
+      # zero out if underlying variable is zero
+      !!treat_name := ifelse(.data[[var]] > 0, .data[[treat_name]], 0),
+
+      # first treatment year
+      !!first_treat_name := if_else(
+        any(.data[[treat_name]] == 1),
+        min(year[.data[[treat_name]] == 1]),
+        NA_real_
+      ),
+
+      # treat forever
+      !!treat_forever_name := as.integer(
+        !is.na(.data[[first_treat_name]]) &
+          year >= .data[[first_treat_name]]
+      )
+    ) %>%
+    ungroup()
+
+  return(data)
+}
+
+
+
+data_1deg <- data_1deg %>%
+ make_shock("wind")
+```
+
+
+
+
+```{r}
+irfs_wind_cumulative <- cumulative_dl(
+  data = data_1deg,
+  outcome = "growth",
+  main_var = "wind_treat",
+  lags = 0:3,
+  fe = "latlon[year] + latlon[year2] + year + country^year",
+  panel_id = c("latlon", "year"),
+  vcov_formula = conley(cutoff=500),
+  shock_label = "Maximum Wind Speed Treatment"
+) %>% mutate(type = "Distributed Lag")
+
+irfs_wind_lp <- lp_panel(
+  data = data_1deg,
+  outcome = "loggdp",
+  main_var = "wind_treat",
+  horizon = 3,
+  fe = "latlon[year] + latlon[year2] + year + country^year ",
+  panel_id = c("latlon", "year"),
+  vcov_formula = conley(cutoff=500)
+) %>% mutate(type = "Local Projection")
+
+irfs_combined <- bind_rows(irfs_wind_cumulative, irfs_wind_lp)
+
+
+# Plot both as a facet
+ggplot(irfs_combined, aes(x = ifelse(type == "Distributed Lag", lag, horizon), 
+                          y = ifelse(type == "Distributed Lag", cumulative_effect, irf_mean))) +
+  geom_line(linewidth = 1.1, color = 'cornflowerblue') +
+  geom_ribbon(aes(ymin = ifelse(type == "Distributed Lag", lower_ci, irf_down), 
+                  ymax = ifelse(type == "Distributed Lag", upper_ci, irf_up)), 
+              alpha = 0.2, fill = 'cornflowerblue', color = NA) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = "top") +
+  scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
+  labs(x = "Years after Treatment",
+       y = "Effect on Income Growth",
+       title = "IRF of Storm Treatment on Income Growth") +
+  facet_wrap(~type, scales = "free_y") +
+  #add 0 
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", size = 0.7)
+```
+
+
+
+```{r}
+est1 <- feols(
+  growth ~ poly(wind_treat,2,raw=TRUE)| latlon[year] + latlon[year2] + year + country^year  ,
+  data = data_1deg, panel.id = c("latlon", "year")
+)
+summary(est1, vcov = conley(cutoff=500))
+
+f <- useful::predict_poly(est1, "wind", min = 0, max = 20, ref = 0, 
+                           xvar_name = "wind", ci_level = 95)
+
+
+# Plot
+ggplot(f, aes(x = wind, y = response)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.7) +
+  theme_classic(base_size = 15) 
+```
+
+
+```{r}
+lp_outcome  <- "loggdp"
+lp_horizon  <- 3
+lp_fe       <- "latlon[year] + latlon[year2] + year"
+lp_panel_id <- c("latlon", "year")
+lp_vcov     <- conley(cutoff=500)
+lp_interact <- "country"
+
+
+run_lp <- function(data, main_var, shock_label) {
+  
+  lp_panel_inter(
+    data          = data,
+    outcome       = lp_outcome,
+    main_var      = main_var,
+    interact_var  = lp_interact,
+    horizon       = lp_horizon,
+    fe            = lp_fe,
+    panel_id      = lp_panel_id,
+    vcov_formula  = lp_vcov
+  ) %>%
+    mutate(shock = shock_label)
+}
+
+
+shock_map <- tibble::tibble(
+  var   = c(
+    "wind",
+    "wind_10ms"
+  ),
+  label = c(
+    "Wind speed",
+    "wind >10 ms"
+  )
+)
+
+irfs_all <- purrr::pmap_dfr(
+  list(shock_map$var, shock_map$label),
+  run_lp,
+  data = data_1deg 
+) %>% filter(category %in% c("USA", "PHL", "MOZ","JPN"))
+
+ggplot(irfs_all, aes(x = horizon, y = irf_mean, color = category, fill = category)) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.6) +
+  
+  geom_ribbon(
+    aes(ymin = irf_down, ymax = irf_up),
+    alpha = 0.2, color = NA
+  ) +
+  
+  geom_line(size = 1.1) +
+  
+  facet_wrap(~ shock, ncol = 3, scales = "free_y") +
+  
+  labs(
+    x = "Horizon (years)",
+    y = "Cumulative IRF of GDP per capita",
+    color = "Period",
+    fill = "Period"
+  ) +
+  
+  scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
+  
+  theme_classic(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  ) 
+```
+
+
+# MACRO VS MICRO MAPS
+
+
+
+```{r}
+fe_lag0 <- feols(
+  f(loggdp,0) - l(loggdp,1) ~ i(country, wind_treat) |
+    latlon[year] + latlon[year2] + year + country^year,
+  data = data_1deg,
+  panel.id = c("latlon", "year"),
+  vcov = conley(cutoff = 500)
+)
+
+# ---------------------------
+# EXTRACT COUNTRY COEFFICIENTS
+# ---------------------------
+coef_country <- tidy(fe_lag0) %>%
+  filter(str_detect(term, ":wind_treat$")) %>%
+  mutate(
+    iso_a3 = str_remove(term, ":wind_treat$") ,
+    
+  ) %>% 
+    mutate(
+    iso_a3 = sub("^country::", "", iso_a3)
+  ) %>%
+  select(iso_a3, estimate)
+
+# ---------------------------
+# JOIN WITH WORLD MAP
+# ---------------------------
+world_joined <- ne_countries(
+  scale = "medium",
+  returnclass = "sf"
+) %>%
+  left_join(coef_country, by = "iso_a3")
+
+# ---------------------------
+# MAP
+# ---------------------------
+ggplot(world_joined) +
+  geom_sf(aes(fill = estimate), color = "white", size = 0.1) +
+  scale_fill_gradientn(
+    colours = brewer_pal(type = "div", palette = "RdBu")(9),
+    limits  = c(-0.02, 0.02),
+    breaks  = seq(-0.02, 0.02, by = 0.005),
+    labels  = percent_format(accuracy = 0.5),
+    na.value = "grey90",
+    name = "GDP growth"
+  ) +
+  coord_sf(expand = FALSE) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right"
+  ) +
+  #robinson
+  coord_sf(crs = "+proj=robin") +
+  guides(
+    fill = guide_colorbar(
+      barheight = unit(5, "cm"),
+      barwidth  = unit(0.6, "cm")
+    )
+  )
+
+```
+
+
+```{r}
+fe_lag0 <- feols(
+  f(loggdp,0) - l(loggdp,1) ~ i(countrycode, maxwind_treat) |
+    countrycode[year] + countrycode[year2] + year,
+  data = data_tc,
+  panel.id = c("countrycode", "year"),
+  vcov = DK ~ year
+)
+
+# ---------------------------
+# EXTRACT COUNTRY COEFFICIENTS
+# ---------------------------
+coef_country <- tidy(fe_lag0) %>%
+  filter(str_detect(term, ":maxwind_treat$")) %>%
+  mutate(
+    iso_a3 = str_remove(term, ":maxwind_treat$") ,
+    
+  ) %>% 
+    mutate(
+    iso_a3 = sub("^countrycode::", "", iso_a3)
+  ) %>%
+  select(iso_a3, estimate)
+
+# ---------------------------
+# JOIN WITH WORLD MAP
+# ---------------------------
+world_joined <- ne_countries(
+  scale = "medium",
+  returnclass = "sf"
+) %>%
+  left_join(coef_country, by = "iso_a3")
+
+# ---------------------------
+# MAP
+# ---------------------------
+ggplot(world_joined) +
+  geom_sf(aes(fill = estimate), color = "white", size = 0.1) +
+  scale_fill_gradientn(
+    colours = brewer_pal(type = "div", palette = "RdBu")(9),
+    limits  = c(-0.02, 0.02),
+    breaks  = seq(-0.02, 0.02, by = 0.005),
+    labels  = percent_format(accuracy = 0.5),
+    na.value = "grey90",
+    name = "GDP growth"
+  ) +
+  coord_sf(expand = FALSE) +
+   coord_sf(crs = "+proj=robin") +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right"
+  ) +
+  guides(
+    fill = guide_colorbar(
+      barheight = unit(5, "cm"),
+      barwidth  = unit(0.6, "cm")
+    )
+  )
+```
+
+
+
+
+
