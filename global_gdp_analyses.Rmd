@@ -241,9 +241,9 @@ make_shock <- function(
 
 
 ```{r}
-pwt <- read_stata("raw data/pwt_clean.dta")
-tcs <- read_stata("raw data/ibtracs_clean.dta")
-wdi <- read_stata("raw data/wdi_clean_2018.dta")
+pwt <- read_stata("raw_data/pwt_clean.dta")
+tcs <- read_stata("raw_data/ibtracs_clean.dta")
+wdi <- read_stata("raw_data/wdi_clean_2018.dta")
 data <- pwt %>% left_join(tcs, by = c("year", "countrycode")) %>%
   left_join(wdi, by = c("year", "countrycode"))
 knot_to_ms = 0.514444
