@@ -11,6 +11,7 @@ library(fixest)
 library(gam)
 library(splines)
 library(ggplot2)
+library(ggpubr)
 library(gridExtra)
 library(useful)
 library(purrr)
@@ -1566,6 +1567,58 @@ ggsave("figures/irf_DL_interact_period.png", width = 5, height = 5)
 
 
 # Treatment Analysis
+
+
+```{r, fig.width=6, fig.height=5, warning=FALSE}
+
+df <- data_tc %>% 
+  filter(maxwind > 0)
+
+# Compute medians
+meds <- df %>%
+  group_by(period) %>%
+  summarise(median_wind = median(maxwind, na.rm = TRUE),
+            n = n())
+
+med1 <- round(meds$median_wind[1],1)
+med2 <- round(meds$median_wind[2],1)
+delta <- round(med1 - med2,1)
+
+# Wilcoxon test
+wil <- wilcox.test(maxwind ~ period, data = df)
+pval <- signif(wil$p.value,1)
+
+ggplot(df, aes(x = maxwind, fill = period)) +
+  
+  geom_density(alpha = 0.4) +
+  
+  # Median lines
+  geom_vline(data = meds,
+             aes(xintercept = median_wind, color = period),
+             linetype = "dashed",
+             size = 1) +
+  
+  # Annotation block
+  annotate(
+    "text",
+    x = Inf,
+    y = Inf,
+    hjust = 1.05,
+    vjust = 1.4,
+    size = 5,
+    label = paste0(
+      "Median diff. = ", delta,
+      "\nWilcoxon p = ", pval
+    )
+  ) +
+  labs(
+    x = "Maximum Wind Speed (m/s)",
+    y = "Density"
+  ) +
+  
+  theme_classic(base_size = 15)
+```
+
 
 
 ```{r, fig.width=5, fig.height=5, warning=FALSE}
