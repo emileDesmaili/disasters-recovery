@@ -12,3 +12,7 @@ processed_data/
 *.RData
 *.RDataTmp
 *.Rhistory
+.Rproj.user
+investigation/.DS_Store
+.DS_Store
+CLAUDE.md
