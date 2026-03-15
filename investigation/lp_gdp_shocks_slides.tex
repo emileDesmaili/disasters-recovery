@@ -514,7 +514,7 @@ Full-sample year FEs are lower pre-1990 and higher post-1990. Including never-tr
 Europe has the largest effect. No single region accounts for the full attenuation.
 \end{frame}
 
-\begin{frame}{Solution: Region-Specific Year FE}
+\begin{frame}{Solution: Region-Specific Year FE}\label{sl:solution}
 \centering
 \includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_continent_year_fe.png}
 
@@ -523,30 +523,135 @@ Europe has the largest effect. No single region accounts for the full attenuatio
 With continent$\times$year FE (5 groups: Africa, Americas, Asia, Europe, Oceania) the gap shrinks by 28\%. With region$\times$year FE (7 World Bank regions, e.g.\ East Asia \& Pacific, Sub-Saharan Africa) the divergence \textbf{vanishes entirely}.
 \end{frame}
 
-\begin{frame}{Placebo Test: Design}
-If the control group is driving the post-1990 divergence, then \textbf{randomly assigning shocks to never-treated countries} should also produce a gap.
+\begin{frame}{FE Comparison: Full Period-Interacted IRFs}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_fe_comparison.png}
+
+\smallskip
+\small
+Post-pre gap at $h = 5$: Baseline $= -3.31$ pp; Region$\times$Year + Country Poly $= +0.44$ pp; Region$\times$Year Only $= +2.14$ pp. Country-specific polynomial trends matter: without them, region$\times$year FE overcorrects.
+\end{frame}
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Placebo Tests}
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+{\hideframenumber
+\begin{frame}
+\subsectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{Placebo Test 1: Shock Scrambling --- Logic}
+\textbf{Question}: Is the post-pre gap driven by the \emph{actual timing} of cyclone shocks, or would any random assignment of shocks among treated countries produce a similar gap?
 
 \medskip
+\textbf{Design}:
 \begin{enumerate}
-  \item Take the 142 countries that never experience a real p95 cyclone shock
-  \item Randomly assign placebo shocks matching the observed frequency and timing
-  \item Estimate the period-interacted LP on this placebo-treated sample
-  \item Record the post-1990 $-$ pre-1990 coefficient gap at $h = 5$
-  \item Repeat 500 times to build a null distribution
+  \item Keep all 182 countries in the sample (40 treated, 142 never-treated)
+  \item Among the 40 ever-treated countries, \textbf{randomly permute} the binary shock indicator ($\text{maxwind}_{95}$) across their country--years
+  \item This preserves: (a) which countries are treated vs.\ never-treated, (b) the total number of shocks, (c) the full control group
+  \item Run the period-interacted LP at $h = 5$ on the scrambled data
+  \item Record the post-1990 $-$ pre-1990 gap; repeat 500 times
 \end{enumerate}
 
 \medskip
-\textbf{Test statistic}: the actual post$-$pre gap ($-0.033$) vs.\ the placebo distribution.
-
-If $p$ is small, the real gap is unlikely under random assignment $\to$ the never-treated countries' GDP trends are systematically correlated with the counterfactual.
+\small
+\textbf{Null hypothesis}: If the gap is an artifact of the estimation framework (year FE structure, compositional differences), it should persist even with scrambled shock timing.
 \end{frame}
 
-\begin{frame}{Placebo Test: Results}
+\begin{frame}{Placebo Test 1: Shock Scrambling --- Results}
 \centering
-\includegraphics[width=0.85\textwidth,height=0.68\textheight,keepaspectratio]{figures/placebo_never_treated.png}
+\includegraphics[width=0.85\textwidth,height=0.62\textheight,keepaspectratio]{figures/placebo_shock_scramble.png}
 
 \smallskip
-$p = 0.08$: the actual gap falls in the left tail. Consistent with control group composition contributing to the result.
+\small
+The scrambled distribution is centered at $\approx -1.5$ pp (not zero), confirming that the estimation framework itself produces a negative gap even with random shock timing. The actual gap ($-3.31$ pp) is in the left tail ($p = 0.10$): marginally unusual, suggesting the real shock timing contributes, but the framework bias accounts for roughly half the gap.
+\end{frame}
+
+\begin{frame}{Placebo Test 2: Control Group Resampling --- Logic}
+\textbf{Question}: How much does the \emph{composition} of the never-treated control group drive the post-pre gap?
+
+\medskip
+\textbf{Design}:
+\begin{enumerate}
+  \item Keep the 40 treated countries and their \textbf{real shocks} fixed
+  \item For each simulation, randomly sample a subset of never-treated countries (from the 142 available) to serve as the control group
+  \item Combine treated + sampled controls $\to$ run the period-interacted LP at $h = 5$ $\to$ record the post-pre gap
+  \item Repeat 500 times at each control group size: 30, 70, and 100 of 142
+\end{enumerate}
+
+\medskip
+\small
+\textbf{Prediction}: If the gap is driven by control group composition, different random subsets should produce different gaps, with larger variance when fewer controls are sampled.
+\end{frame}
+
+\begin{frame}{Placebo Test 2: Control Group Resampling --- Results}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/placebo_control_resampling.png}
+
+\smallskip
+\small
+\begin{itemize}
+  \item With 30/142 controls: mean gap $= -2.0$ pp, SD $= 1.2$ pp (range: $-5.6$ to $+0.8$)
+  \item With 100/142 controls: mean gap $= -3.1$ pp, SD $= 0.7$ pp (range: $-4.7$ to $-1.2$)
+  \item The gap is \textbf{highly sensitive} to which never-treated countries are included
+  \item Smaller control groups shift the mean toward zero --- consistent with the control group inflating the gap
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Placebo Tests: Summary}
+\begin{enumerate}
+  \item \textbf{Shock scrambling}: The estimation framework produces a $\approx -1.5$ pp gap even with random shock timing. The actual gap ($-3.31$ pp) is only marginally extreme ($p = 0.10$).
+
+  \medskip
+  \item \textbf{Control resampling}: The gap varies from $+0.8$ to $-5.7$ pp depending on which never-treated countries are included. Smaller control groups attenuate the gap toward zero.
+
+  \medskip
+  \item \textbf{Implication}: Both tests point to control group composition as a major driver of the post-pre divergence. The definitive evidence is the region$\times$year FE result (slide~\ref{sl:solution}), where the gap \textbf{vanishes entirely}.
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Placebo Tests with Region $\times$ Year FE: Shock Scrambling}
+\textbf{Same scrambling design}, but now estimated with region$\times$year FE instead of plain year FE. Two variants: with and without country-specific polynomial trends.
+
+\centering
+\includegraphics[width=0.82\textwidth,height=0.55\textheight,keepaspectratio]{figures/placebo_scramble_regionfe.png}
+
+\smallskip
+\small
+With region$\times$year FE, the actual gap is tiny ($+0.44$ pp with country polynomials; $+2.14$ pp without) and well within the scrambled distribution ($p = 0.76$ and $p = 0.22$). The framework no longer produces spurious gaps.
+\end{frame}
+
+\begin{frame}{Placebo Tests with Region $\times$ Year FE: Control Resampling}
+\textbf{Same resampling design}, but now estimated with region$\times$year FE. Left column includes country-specific polynomial trends; right column does not.
+
+\centering
+\includegraphics[width=0.85\textwidth,height=0.52\textheight,keepaspectratio]{figures/placebo_control_regionfe.png}
+
+\smallskip
+\small
+With region$\times$year FE, the resampled distributions are tightly centered on the actual gap. Control group composition no longer shifts the estimate --- the region$\times$year FE absorb the heterogeneous trends that previously drove sensitivity. Country polynomials tighten the distribution further.
+\end{frame}
+
+\begin{frame}{Placebo Tests: Overall Summary}
+\begin{enumerate}
+  \item \textbf{Baseline year FE}: Both placebo tests flag problems
+  \begin{itemize}
+    \item Shock scrambling: framework produces $-1.5$ pp bias; actual gap only marginally extreme ($p = 0.10$)
+    \item Control resampling: gap ranges from $+0.8$ to $-5.7$ pp depending on which controls are included
+  \end{itemize}
+
+  \medskip
+  \item \textbf{Region $\times$ year FE}: Both tests pass cleanly
+  \begin{itemize}
+    \item Shock scrambling: $p = 0.76$ (with country poly) / $p = 0.22$ (without)
+    \item Control resampling: distributions tightly centered, insensitive to control group composition
+  \end{itemize}
+
+  \medskip
+  \item \textbf{Country-specific polynomials} matter: without them, region$\times$year FE overcorrect (gap flips to $+2.14$ pp). With them, the gap is near zero ($+0.44$ pp).
+\end{enumerate}
 \end{frame}
 
 % ===============================================================
