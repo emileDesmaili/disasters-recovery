@@ -37,13 +37,9 @@ library(ggpubr)
 library(splp)
 
 options(tigris_use_cache = TRUE)
-
-```
-
-
-```{r}
 source("emileRegs.R")
 ```
+
 
 
 
@@ -52,7 +48,7 @@ source("emileRegs.R")
 
 
 ```{r}
-data <- read_stata("raw data/DATA_hurricane_mortality_temp_month_state_19302015.dta")
+data <- read_stata("raw_data/DATA_hurricane_mortality_temp_month_state_19302015.dta")
 data$month_year <- paste0(data$year, sprintf("%02d", data$month))
 data$month_state <- paste0(data$month, "_", data$state_abbrev)
 
@@ -532,6 +528,13 @@ data_tc <- data_tc %>%
      )
   ) %>%
   ungroup()
+
+#add region 
+data_tc <- data_tc %>%
+  mutate(
+    region = countrycode(countrycode, "iso3c", "region"),
+    region = ifelse(is.na(region), "Other", region)
+  )
 
 ```
 
@@ -1455,7 +1458,7 @@ irfs_wind_cumulative <- cumulative_dl(
   outcome = "gdp_diff",
   main_var = "maxwind",
   lags = 0:20,
-  fe = "countrycode[year] + countrycode[year2] + year",
+  fe = "countrycode[year] + countrycode[year2] + region^year",
   panel_id = c("countrycode", "year"),
   vcov_formula = DK ~ year,
   shock_label = "Maximum Wind Speed Treatment"
@@ -1491,7 +1494,7 @@ for (spec_name in names(lag_specs)) {
     outcome = "gdp_diff",
     main_var = "maxwind_treat",
     lags = lag_specs[[spec_name]],
-    fe = "countrycode[year] + countrycode[year2] + year",
+    fe = "countrycode[year] + countrycode[year2] + region^year",
     panel_id = c("countrycode", "year"),
     vcov_formula = DK ~ year,
     shock_label = spec_name
@@ -1531,10 +1534,10 @@ ggplot(all_results, aes(x = lag, y = cumulative_effect,
 results_continent <- cumulative_dl_interact(
   data = data_tc,
   outcome = "gdp_diff",
-  main_var = "maxwind_treat",
+  main_var = "wind_cat3",
   interact_var = "period",
   lags = 0:10,
-  fe = "countrycode[year] + countrycode[year2] + year",
+  fe = "countrycode[year] + countrycode[year2] + region^year",
   panel_id = c("countrycode", "year"),
   vcov_formula = DK ~ year
 )
@@ -1547,8 +1550,6 @@ ggplot(results_continent, aes(x = lag, y = cumulative_effect, color = category, 
   theme_classic(base_size = 15) +
   theme(legend.position = "top") +
   scale_y_continuous(labels = function(x) paste0(100*x, "%")) +
-  scale_color_manual(values = c(myred, myblue,myyellow,myblack,mygreen)) +
-  scale_fill_manual(values = c(myred, myblue,myyellow,myblack,mygreen)) +
   labs(
     x = "Years after shock",
     y = " GDP growth"
@@ -2729,7 +2730,7 @@ ggplot(data_plot, aes(x = year, y = countrycode)) +
 
 lp_outcome  <- "loggdp"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_interact <- "period"
@@ -2827,7 +2828,7 @@ irfs_all <- imap_dfr(shocks, ~ {
     controls = "l(gdp_diff,1:2)",
     main_var = .y,
     horizon = 10,
-    fe = "countrycode[year] + countrycode[year2] + year",
+    fe = "countrycode[year] + countrycode[year2] + region^year",
     panel_id = c("countrycode", "year"),
     vcov_formula = DK ~ year
   ) %>%
@@ -2862,7 +2863,7 @@ ggplot(irfs_all, aes(x = horizon, y = irf_mean)) +
 
 lp_outcome  <- "loggdp"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_interact <- "decade"
@@ -2954,7 +2955,7 @@ ggsave("figures/irf_comparison_decade.png", dpi = 300)
 lp_outcome  <- "loggdp"
 lp_shock    <- "maxwind_treat"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2]  +year"
+lp_fe       <- "countrycode[year] + countrycode[year2]  +region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_controls <- "l(gdp_diff,1:2)"
@@ -3113,7 +3114,7 @@ irfs_all <- map_dfr(shocks, ~
     main_var = .x,
     horizon = 10,
     controls="l(gdp_diff,1:2)",
-    fe = "countrycode[year] + countrycode[year2]  + year",
+    fe = "countrycode[year] + countrycode[year2]  + region^year",
     panel_id = c("countrycode", "year"),
     vcov_formula = DK ~ year
   ) %>%
@@ -3157,8 +3158,8 @@ ggsave("figures/irf_maxwind_energy.png", dpi = 300)
 # ----------------------------
 lp_outcome  <- "loggdp"
 lp_shock    <- "maxwind_95"
-lp_horizon  <- 12
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_horizon  <- 10
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_interact <- "period"
@@ -3264,7 +3265,7 @@ irfs_all <- map_dfr(shocks, ~
     main_var = .x,
     horizon = 10,
     controls="l(gdp_diff,1:2)",
-    fe = "countrycode[year] + countrycode[year2] + countrycode[year3] + countrycode[year4] year",
+    fe = "countrycode[year] + countrycode[year2] + region^year",
     panel_id = c("countrycode", "year"),
     vcov_formula = DK ~ year
   ) %>%
@@ -3309,7 +3310,7 @@ ggsave("figures/irf_maxwindtreat_energy.png", dpi = 300)
 lp_outcome  <- "loggdp"
 lp_shock    <- "maxwind_treat"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_interact <- "period"
@@ -3410,7 +3411,7 @@ ggsave("figures/irf_maxwindtreat_periods.png", dpi = 300)
 lp_outcome  <- "loggdp"
 lp_shock    <- "maxwind_treat"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2]  +year"
+lp_fe       <- "countrycode[year] + countrycode[year2]  + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_controls <- "l(gdp_diff,1:2)"
@@ -3480,7 +3481,7 @@ ggsave("figures/irf_maxwindtreat_pastyears.png", dpi = 300)
 lp_outcome  <- "loggdp"
 lp_shock    <- "maxwind_treat_varweight"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_controls <- "l(gdp_diff,2:3)"
@@ -3813,7 +3814,7 @@ ggsave("figures/recovery_time_ttlbin3.png", dpi = 300)
 ```{r, message=FALSE, fig.width=5, fig.height=5}
 
 mod_fstage <- feols(
-  loggdp ~ 1 | countrycode[year] + countrycode[year2] + year + countrycode,
+  loggdp ~ 1 | countrycode[year] + countrycode[year2] + region^year ,
   data = data_tc
 )
 
@@ -3822,7 +3823,7 @@ data_tc$loggdp_hat <- data_tc$loggdp - data_tc$loggdp_hat
 data_tc$gdp_hat_diff <- data_tc$loggdp_hat - dplyr::lag(data_tc$loggdp_hat)
 
 
-mycountry <- 'USA'
+mycountry <- 'PHL'
 horizon <- 9
 
 data_tc <- data_tc %>%
@@ -3863,7 +3864,7 @@ irfs_list <- map_dfr(disaster_cols, function(colname) {
     main_var    = colname,
     horizon     = horizon,
     controls    = NULL, #"l(gdp_diff,1:2)",
-    fe          = "countrycode[year] + countrycode[year2]  + year + countrycode  ",       # already residualized
+    fe          = "countrycode[year] + countrycode[year2]  + region^year   ",       # already residualized
     panel_id    = c("countrycode", "year"),
     vcov_formula = DK ~ year
   )
@@ -3881,52 +3882,53 @@ irfs_time <- irfs_list %>%
   )
 
 
+# match colors: one per disaster event
+n_events     <- length(disaster_cols)
+event_colors <- setNames(
+  scales::hue_pal()(n_events),
+  disaster_cols
+)
+
 p_irf <- ggplot(irfs_time, aes(x = cal_year, y = irf_mean, color = disaster_code)) +
   geom_ribbon(aes(ymin = irf_down, ymax = irf_up, fill = disaster_code),
               alpha = 0.1, color = NA) +
   geom_line(linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(
-    x = "",
-    y = "IRF",
-    color = "Disaster",
-    fill  = "Disaster"
-  ) +
+  scale_color_manual(values = event_colors) +
+  scale_fill_manual(values  = event_colors) +
+  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks) +
+  labs(x = "", y = "IRF") +
   theme_classic() +
-  theme(legend.position = "bottom")
+  theme(
+    legend.position  = "none",
+    axis.text.x      = element_blank(),
+    axis.title.x     = element_blank()
+  )
 
-# ---- Timeline of maxwind shocks ----
-maxcal <- max(irfs_time$cal_year, na.rm = TRUE)
+# Timeline bars colored by event, matching IRF colors
 timeline_data <- data_tc2 %>%
-  filter(countrycode == mycountry & maxwind_treat == 1) 
+  filter(countrycode == mycountry & maxwind_treat == 1) %>%
+  mutate(disaster_code = paste0("i_", year))
 
-p_timeline <- ggplot(timeline_data, aes(x = year, y = maxwind_shock)) +
-  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+p_timeline <- ggplot(timeline_data,
+                     aes(x = year, y = maxwind_shock, fill = disaster_code)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  scale_fill_manual(values = event_colors) +
+  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks) +
   labs(x = "Year", y = "Maxwind Shock") +
   theme_classic() +
   theme(
-    axis.text.y = element_text(size = 8),
-    axis.title.y = element_text(size = 10),
-    axis.title.x = element_text(size = 10)
+    legend.position  = "none",
+    axis.text.y      = element_text(size = 8),
+    axis.title.y     = element_text(size = 10),
+    axis.title.x     = element_text(size = 10)
   )
-
-
-x_min <- min(irfs_time$cal_year, timeline_data$year, na.rm = TRUE)-1
-x_max <- max(irfs_time$cal_year, timeline_data$year, na.rm = TRUE)
-x_breaks <- seq(x_min, x_max, by = 5)
-
-p_irf <- p_irf +
-  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks) +
-  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
-
-p_timeline <- p_timeline +
-  scale_x_continuous(limits = c(x_min, x_max), breaks = x_breaks)
 
 p_final <- p_irf / p_timeline + plot_layout(heights = c(3, 0.5))
 
+ggsave(filename = paste0("figures/irfs_events_", mycountry, ".png"),
+       plot = p_final, dpi = 300)
 
-ggsave(filename = paste0("figures/irfs_events_", mycountry, ".png"), plot = p_final,
-       dpi = 300)
 
 p_final
 ```
@@ -4032,7 +4034,7 @@ summary(mod) %>% print()
 
 lp_outcome  <- "loggdp"
 lp_horizon  <- 10
-lp_fe       <- "countrycode[year] + countrycode[year2] + year"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 lp_panel_id <- c("countrycode", "year")
 lp_vcov     <- DK ~ year
 lp_interact <- "period"
@@ -6602,8 +6604,8 @@ irf_list <- list()
 
 for (h in 0:H) {
   fe_model <- feols(
-    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_treat) |
-      countrycode[year] + countrycode[year2] + year,
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, wind_cat1) |
+      countrycode[year] + countrycode[year2] + year^region,
     data = data_tc,
     panel.id = c("countrycode", "year"),
     vcov = DK ~ year

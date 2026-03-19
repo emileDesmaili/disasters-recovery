@@ -1,0 +1,358 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, warnings=FALSE, message=FALSE}
+library(tidyverse)
+library(marginaleffects)
+library(fixest)
+library(gam)
+library(splines)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(useful)
+library(purrr)
+library(patchwork)
+library(rms)
+library(tidycensus)
+library(tigris)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(did)
+library(haven)
+library(bea.R)
+library(lpdid)
+library(DIDmultiplegtDYN)
+library(ggpattern)
+library(countrycode)
+library(stringr)
+library(ggpattern)
+library(scales)
+library(RColorBrewer)
+library(ggpubr)
+library(splp)
+library(MatchIt)
+library(cobalt)
+
+options(tigris_use_cache = TRUE)
+setFixest_notes(FALSE)
+source("../emileRegs.R")
+```
+
+
+
+
+
+# Data  
+
+```{r}
+myblue  = "#1f78b4"   # blue
+myred  = "#e31a1c"
+myyellow = "orange"  # orange
+myblack = "black"  # light blue
+mygreen = "forestgreen"  # green
+```
+
+
+
+```{r}
+# Also load full panel for comparison
+pwt  <- read_stata("../raw_data/pwt_clean.dta")
+tcs  <- read_stata("../raw_data/ibtracs_clean.dta")
+data_full <- pwt %>% left_join(tcs, by = c("year", "countrycode"))
+
+knot_to_ms <- 0.514444
+data <- data_full %>%
+  mutate(
+    maxwind  = replace_na(max_ann_wind_i_nob, 0) * knot_to_ms,
+    energy  = replace_na(sum_ann_energy_i_nob, 0),
+    nlands  = replace_na(sum_a_lands_nob, 0),
+    loggdp   = ln_real_gdp_usd_pc,
+    gdp_diff = growth_real_gdp_usd_pc,
+    year2    = year^2,
+    period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
+  ) %>%
+  filter(year >= 1969) %>%
+  mutate(
+    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+    maxwind_p99 = quantile(maxwind[year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+    maxwind_99 = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
+    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
+    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
+    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
+    energy_p95  = quantile(energy[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
+    nlands_p95  = quantile(nlands[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
+    energy_95  = as.integer(energy_p95  > 0 & energy  >= energy_p95),
+    nlands_95  = as.integer(nlands_p95  > 0 & nlands  >= nlands_p95),
+    energy_p99 = quantile(energy[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
+    nlands_p99 = quantile(nlands[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
+    energy_99  = as.integer(energy_p99  > 0 & energy >= energy_p99),
+    nlands_99  = as.integer(nlands_p99  > 0 & nlands  >= nlands_p99),
+    region = countrycode(countrycode, "iso3c", "region"),
+    region = ifelse(is.na(region), "Other", region),
+    continent = countrycode(countrycode, "iso3c", "continent"),
+    continent = ifelse(is.na(continent), "Other", continent)
+  )
+
+data <- data %>%
+  mutate(
+    maxwind_sd = maxwind / sd(maxwind[maxwind > 0], na.rm = TRUE),
+    energy_sd  = energy  / sd(energy[energy > 0],   na.rm = TRUE),
+    nlands_sd  = nlands  / sd(nlands[nlands > 0],   na.rm = TRUE)
+  )
+
+
+
+```
+
+
+
+
+
+
+# Maps
+
+```{r}
+data_tc_filtered <- data %>%
+  group_by(countrycode) %>%
+  filter(max(maxwind, na.rm = TRUE) > 0 | max(nlands, na.rm = TRUE) > 0) %>%
+  ungroup()
+
+
+ggplot(
+  ne_countries(scale = "medium", returnclass = "sf") %>%
+    left_join(
+      data_tc_filtered %>%
+        group_by(countrycode) %>%
+        summarise(mean_maxwind = mean(maxwind, na.rm = TRUE)),
+      by = c("adm0_a3" = "countrycode")
+    ) %>% #remove antarctica
+    filter(name != "Antarctica")
+) +
+  geom_sf(aes(fill = mean_maxwind), color = "white", size = 0.1) +
+  scale_fill_distiller(
+    palette = "YlOrRd",
+    direction = 1,
+    na.value = "grey90",
+    name = " Max Wind Speed (m/s)"
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_maxwind.png", width = 8, height = 5)
+
+
+
+ggplot(
+  ne_countries(scale = "medium", returnclass = "sf") %>%
+    left_join(
+      data_tc %>%
+        group_by(countrycode) %>%
+        summarise(gdp = mean(loggdp, na.rm = TRUE)),
+      by = c("iso_a3" = "countrycode")
+    )%>% #remove antarctica
+    filter(name != "Antarctica")
+) +
+  geom_sf(aes(fill = gdp), color = "white", size = 0.1) +
+  scale_fill_gradientn(
+    colors = c("darkblue", RColorBrewer::brewer.pal(9, "Spectral")),
+    values = scales::rescale(
+      c(
+        min(data_tc$gdp, na.rm = TRUE),
+        max(data_tc$gdp, na.rm = TRUE)
+      )
+    ),
+       #labels = scales::percent_format(accuracy = 0.1), # <-- display as %
+    na.value = "grey90",
+    name = "log GDP pc"
+  ) +
+  #robinson proj
+  coord_sf(crs = "+proj=robin") +
+  theme_void() +
+      theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+ggsave("figures/map_gdp.png", width = 8, height = 5)
+
+
+```
+
+# Time Series
+
+```{r}
+# ── shared theme ────────────────────────────────────────────────────────────
+base_theme <- theme_classic(base_size = 12) +
+  theme(
+    strip.background   = element_blank(),
+    strip.text         = element_text(face = "bold"),
+    axis.title         = element_text(face = "bold"),
+    panel.grid.major.y = element_line(color = "grey93", linewidth = 0.4),
+    plot.title         = element_text(face = "bold", size = 11),
+    plot.subtitle      = element_text(size = 9, color = "grey40"),
+    legend.background  = element_blank(),
+    legend.key         = element_blank()
+  )
+
+col_main   <- "#2b6cb0"   # steel blue
+col_light  <- "#90cdf4"
+col_pre    <- "#4a90d9"
+col_post   <- "#c0392b"
+col_p95    <- "#e67e22"
+col_p99    <- "#8e44ad"
+
+# ── panel-level summary ─────────────────────────────────────────────────────
+
+# P2 & P4: annual summaries
+annual <- data %>%
+  filter(year >= 1970, year <= 2014) %>%
+  group_by(year) %>%
+  summarise(
+    avg_wind  = mean(maxwind[maxwind > 0], na.rm = TRUE),
+    max_wind  = max(maxwind, na.rm = TRUE),
+    n_exposed = sum(maxwind > 0, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(top5 = rank(-max_wind) <= 5)
+
+# P4: extreme event counts per year
+extreme <- data %>%
+  filter(year >= 1970, year <= 2014) %>%
+  group_by(year) %>%
+  summarise(
+    n_p95  = sum(maxwind_95, na.rm = TRUE),
+    n_cat1 = sum(cat1_plus,  na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(n_p95, n_cat1),
+               names_to = "threshold", values_to = "n_events") %>%
+  mutate(threshold = recode(threshold,
+                            n_p95  = "p95 (binary)",
+                            n_cat1 = "Cat 1+ (\u226533 m/s)"))
+
+# ── P1: lollipop — top 15 countries by average max wind ─────────────────────
+top_countries <- data %>%
+  filter(year >= 1970, year <= 2014, maxwind > 0) %>%
+  group_by(countrycode) %>%
+  summarise(avg_maxwind = mean(maxwind, na.rm = TRUE), .groups = "drop") %>%
+  slice_max(avg_maxwind, n = 15) %>%
+  mutate(countrycode = fct_reorder(countrycode, avg_maxwind))
+
+p1 <- ggplot(top_countries, aes(x = avg_maxwind, y = countrycode)) +
+  geom_segment(aes(x = 0, xend = avg_maxwind,
+                   y = countrycode, yend = countrycode),
+               color = "firebrick", linewidth = 1.1) +
+  geom_point(size = 3, color = "firebrick") +
+  labs(
+    title    = "A  Countries with highest average max wind speed",
+    subtitle = "Top 15 countries, mean over exposed years 1970\u20132014",
+    x        = "Avg max wind (m/s)",
+    y        = NULL
+  ) +
+  base_theme
+
+# ── P2: max wind per year as bar chart ──────────────────────────────────────
+p2 <- ggplot(annual, aes(x = year, y = max_wind, fill = top5)) +
+  geom_col(alpha = 0.85, width = 0.8) +
+  geom_smooth(aes(x = year, y = max_wind), method = "lm", se = FALSE,
+              color = col_post, linewidth = 1.1, linetype = "dashed",
+              inherit.aes = FALSE) +
+  geom_text(
+    data = ~ filter(.x, top5),
+    aes(label = year, y = max_wind),
+    color = "#e63946", fontface = "bold", size = 3.2,
+    vjust = -0.5, hjust = 0.5
+  ) +
+  scale_fill_manual(values = c("FALSE" = col_main, "TRUE" = "#e63946"),
+                    guide = "none") +
+  scale_x_continuous(breaks = seq(1970, 2014, 8)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
+  labs(
+    title    = "B  Peak max wind speed per year",
+    subtitle = "Dashed line = linear trend; red = top 5 years",
+    x        = "Year",
+    y        = "Max wind speed (m/s)"
+  ) +
+  base_theme
+
+# ── P3: Kernel density of max wind, pre vs post 1990 ────────────────────────
+kde_data <- data %>%
+  filter(year >= 1970, year <= 2014, maxwind > 0) %>%
+  mutate(period = factor(period, levels = c("Pre-1990", "Post-1990")))
+
+p3 <- ggplot(kde_data, aes(x = maxwind, color = period, fill = period)) +
+  geom_density(alpha = 0.18, linewidth = 1.2, bw = "nrd0") +
+  geom_vline(
+    data = kde_data %>%
+      group_by(period) %>%
+      summarise(med = median(maxwind), .groups = "drop"),
+    aes(xintercept = med, color = period),
+    linetype = "dashed", linewidth = 0.8
+  ) +
+  scale_color_manual(values = c("Pre-1990"  = col_pre,
+                                "Post-1990" = col_post),
+                     name = NULL) +
+  scale_fill_manual(values  = c("Pre-1990"  = col_pre,
+                                "Post-1990" = col_post),
+                    name = NULL) +
+  scale_x_continuous(limits = c(0, NA)) +
+  labs(
+    title    = "C  Distribution of max wind speed: Pre- vs Post-1990",
+    subtitle = "Kernel density; dashed lines = medians; exposed country-years only",
+    x        = "Max wind speed (m/s)",
+    y        = "Density"
+  ) +
+  base_theme +
+  theme(legend.position = c(0.78, 0.80))
+
+# ── P4: trend in extreme events per year ────────────────────────────────────
+p4 <- ggplot(extreme, aes(x = year, y = n_events,
+                           color = threshold, fill = threshold)) +
+  geom_line(linewidth = 0.7, alpha = 0.7) +
+  geom_point(size = 1.6, alpha = 0.8) +
+  geom_smooth(method = "lm", se = TRUE, linewidth = 1.1, alpha = 0.15) +
+  scale_color_manual(values = c("p95 (binary)"    = col_p95,
+                                "Cat 1+ (\u226533 m/s)" = col_p99),
+                     name = NULL) +
+  scale_fill_manual(values  = c("p95 (binary)"    = col_p95,
+                                "Cat 1+ (\u226533 m/s)" = col_p99),
+                    name = NULL) +
+  scale_x_continuous(breaks = seq(1970, 2014, 8)) +
+  labs(
+    title    = "D  Extreme TC events per year",
+    subtitle = "Linear trends by threshold",
+    x        = "Year",
+    y        = "# country-years above threshold"
+  ) +
+  base_theme +
+  theme(legend.position = c(0.22, 0.88))
+
+# ── Combine with patchwork ───────────────────────────────────────────────────
+wind_descriptives <- (p1 + p2) / (p3 + p4) +
+  plot_annotation(
+    title   = "Tropical Cyclone Climatology, 1970\u20132014",
+    caption = "Source: IBTrACS + PWT. Max wind in m/s. p95/p99 thresholds computed over 1970\u20132014.",
+    theme   = theme(
+      plot.title   = element_text(face = "bold", size = 14),
+      plot.caption = element_text(size = 8, color = "grey50")
+    )
+  )
+
+ggsave("figures/wind_descriptives.png",
+       wind_descriptives, width = 12, height = 9, dpi = 300)
+
+wind_descriptives
+```
+
+
+

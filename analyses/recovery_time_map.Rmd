@@ -1,0 +1,213 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, warnings=FALSE, message=FALSE}
+library(tidyverse)
+library(marginaleffects)
+library(fixest)
+library(gam)
+library(splines)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(useful)
+library(purrr)
+library(patchwork)
+library(rms)
+library(tidycensus)
+library(tigris)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(did)
+library(haven)
+library(bea.R)
+library(lpdid)
+library(DIDmultiplegtDYN)
+library(ggpattern)
+library(countrycode)
+library(stringr)
+library(ggpattern)
+library(scales)
+library(RColorBrewer)
+library(ggpubr)
+library(splp)
+library(MatchIt)
+library(cobalt)
+
+options(tigris_use_cache = TRUE)
+setFixest_notes(FALSE)
+source("../emileRegs.R")
+```
+
+
+
+
+
+# Data  
+
+```{r}
+myblue  = "#1f78b4"   # blue
+myred  = "#e31a1c"
+myyellow = "orange"  # orange
+myblack = "black"  # light blue
+mygreen = "forestgreen"  # green
+```
+
+
+
+```{r}
+# Also load full panel for comparison
+pwt  <- read_stata("../raw_data/pwt_clean.dta")
+tcs  <- read_stata("../raw_data/ibtracs_clean.dta")
+data_full <- pwt %>% left_join(tcs, by = c("year", "countrycode"))
+
+knot_to_ms <- 0.514444
+data <- data_full %>%
+  mutate(
+    maxwind  = replace_na(max_ann_wind_i_nob, 0) * knot_to_ms,
+    energy  = replace_na(sum_ann_energy_i_nob, 0),
+    nlands  = replace_na(sum_a_lands_nob, 0),
+    loggdp   = ln_real_gdp_usd_pc,
+    gdp_diff = growth_real_gdp_usd_pc,
+    year2    = year^2,
+    period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
+  ) %>%
+  filter(year >= 1969) %>%
+  mutate(
+    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+    maxwind_p99 = quantile(maxwind[year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+    maxwind_99 = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
+    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
+    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
+    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
+    energy_p95  = quantile(energy[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
+    nlands_p95  = quantile(nlands[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
+    energy_95  = as.integer(energy_p95  > 0 & energy  >= energy_p95),
+    nlands_95  = as.integer(nlands_p95  > 0 & nlands  >= nlands_p95),
+    energy_p99 = quantile(energy[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
+    nlands_p99 = quantile(nlands[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
+    energy_99  = as.integer(energy_p99  > 0 & energy >= energy_p99),
+    nlands_99  = as.integer(nlands_p99  > 0 & nlands  >= nlands_p99),
+    region = countrycode(countrycode, "iso3c", "region"),
+    region = ifelse(is.na(region), "Other", region),
+    continent = countrycode(countrycode, "iso3c", "continent"),
+    continent = ifelse(is.na(continent), "Other", continent)
+  )
+
+data <- data %>%
+  mutate(
+    maxwind_sd = maxwind / sd(maxwind[maxwind > 0], na.rm = TRUE),
+    energy_sd  = energy  / sd(energy[energy > 0],   na.rm = TRUE),
+    nlands_sd  = nlands  / sd(nlands[nlands > 0],   na.rm = TRUE)
+  )
+
+
+
+```
+
+
+
+
+
+
+# Recovery Time Map
+
+```{r}
+# ── LP: country-level IRFs ───────────────────────────────────────────────────
+H        <- 10
+panel_id <- c("countrycode", "year")
+vcov_fm  <- DK ~ year
+
+irf_list <- vector("list", H + 1)
+
+for (h in 0:H) {
+  fe_model <- feols(
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_95) | countrycode[year] + countrycode[year2] + year^region,
+    data = data,
+    panel.id = panel_id,
+    vcov = vcov_fm
+  )
+  
+  coef_df <- data.frame(
+    horizon  = h,
+    term     = names(coef(fe_model)),
+    estimate = coef(fe_model)
+  )
+  
+  coef_df <- coef_df %>%
+    filter(str_detect(term, "::")) %>%
+    mutate(
+      country = str_match(term, ".*::(.*?):.*")[, 2]
+    )
+  
+  irf_list[[h + 1]] <- coef_df
+}
+
+irfs <- bind_rows(irf_list)
+
+
+irf_recovery <- irfs %>%
+  group_by(country) %>%
+  arrange(horizon) %>%
+  dplyr::summarize(
+    first_below_zero = ifelse(any(estimate < 0), min(horizon[estimate < 0]), NA_real_),
+    first_back_to_zero = ifelse(
+      any(estimate < 0) & any(estimate >= 0 & horizon > min(horizon[estimate < 0])),
+      min(horizon[estimate >= 0 & horizon > min(horizon[estimate < 0])]),
+      NA_real_
+    ),
+    recovery_time = case_when(
+      is.na(first_below_zero) ~ -1,      # never goes below 0
+      is.na(first_back_to_zero) ~ H + 1, # never recovers within horizon
+      TRUE ~ first_back_to_zero - first_below_zero
+    ),
+    .groups = "drop"
+  )
+
+# ── Map ──────────────────────────────────────────────────────────────────────
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery, by = c("adm0_a3" = "country")) %>% 
+  #remove Antarctica
+  filter(name != "Antarctica")
+
+map_breaks <- c(0, 1, 2, 3, 5, 7, 10, 12)
+map_labels <- c("0", "1", "2", "3", "5", "7", "10", "10+")
+
+fig_recovery_map <- ggplot(world_joined) +
+  geom_sf(aes(fill = recovery_time), color = "white", linewidth = 0.1) +
+  scale_fill_stepsn(
+    colours  = rev(RColorBrewer::brewer.pal(9, "Spectral")),
+    breaks   = map_breaks,
+    limits   = c(0, 12),
+    labels   = map_labels,
+    na.value = "grey90",
+    name     = "Years to recovery",
+    guide    = guide_colorsteps(
+      barheight       = unit(3.5, "cm"),
+      barwidth        = unit(0.6, "cm"),
+      show.limits     = TRUE,
+      title.position  = "top"
+    )
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void(base_size = 14) +
+  theme(
+    legend.position  = "right",
+    legend.direction = "vertical",
+    legend.title     = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 11)
+  )
+
+ggsave("figures/map_recovery_time_LP.png",
+       fig_recovery_map, width = 8, height = 5, dpi = 300)
+
+fig_recovery_map
+```
+
+
+

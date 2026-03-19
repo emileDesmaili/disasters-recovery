@@ -1,0 +1,618 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, warnings=FALSE, message=FALSE}
+library(tidyverse)
+library(marginaleffects)
+library(fixest)
+library(gam)
+library(splines)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(useful)
+library(purrr)
+library(patchwork)
+library(rms)
+library(tidycensus)
+library(tigris)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(did)
+library(haven)
+library(bea.R)
+library(lpdid)
+library(DIDmultiplegtDYN)
+library(ggpattern)
+library(countrycode)
+library(stringr)
+library(ggpattern)
+library(scales)
+library(RColorBrewer)
+library(ggpubr)
+library(splp)
+library(MatchIt)
+library(cobalt)
+library(cowplot)
+
+options(tigris_use_cache = TRUE)
+setFixest_notes(FALSE)
+source("../emileRegs.R")
+```
+
+
+
+
+
+# Data  
+
+```{r}
+myblue  = "#1f78b4"   # blue
+myred  = "#e31a1c"
+myyellow = "orange"  # orange
+myblack = "black"  # light blue
+mygreen = "forestgreen"  # green
+```
+
+
+
+```{r}
+# Also load full panel for comparison
+pwt  <- read_stata("../raw_data/pwt_clean.dta")
+tcs  <- read_stata("../raw_data/ibtracs_clean.dta")
+data_full <- pwt %>% left_join(tcs, by = c("year", "countrycode"))
+
+knot_to_ms <- 0.514444
+data <- data_full %>%
+  mutate(
+    maxwind  = replace_na(max_ann_wind_i_nob, 0) * knot_to_ms,
+    loggdp   = ln_real_gdp_usd_pc,
+    gdp_diff = growth_real_gdp_usd_pc,
+    year2    = year^2,
+    period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
+  ) %>%
+  filter(year >= 1969) %>%
+  mutate(
+    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
+    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
+    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
+    region = countrycode(countrycode, "iso3c", "region"),
+    region = ifelse(is.na(region), "Other", region),
+    continent = countrycode(countrycode, "iso3c", "continent"),
+    continent = ifelse(is.na(continent), "Other", continent)
+  )
+
+country_gdp <- data %>%
+  filter(!is.na(loggdp)) %>%
+  group_by(countrycode) %>%
+  summarise(
+    mean_loggdp = mean(loggdp, na.rm = TRUE),
+    mean_gdp_pc = exp(mean(loggdp, na.rm = TRUE)),
+    n_shocks_95 = sum(maxwind_95, na.rm = TRUE),
+    total_wind  = sum(maxwind, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    income_quartile = ntile(mean_loggdp, 4),
+    income_quartile_label = factor(
+      income_quartile,
+      levels = 1:4,
+      labels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)")
+    )
+  )
+
+data <- data %>%
+  left_join(
+    country_gdp %>% select(countrycode, income_quartile, income_quartile_label,
+                            mean_loggdp, mean_gdp_pc),
+    by = "countrycode"
+  )
+
+```
+
+
+
+
+# Exposure
+
+```{r}
+outcome  <- "loggdp"
+horizon  <- 10
+make_controls <- function(shock_var) {
+  paste0("l(gdp_diff,1:2) + l(", shock_var, ",1:2)")
+}
+fe       <- "countrycode[year] + countrycode[year2] + region^year"
+panel_id <- c("countrycode", "year")
+vcov_fm  <- DK ~ year
+```
+
+
+```{r}
+
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Country-level tercile lookup (one row per country)
+tercile_map <- data %>%
+  distinct(countrycode, cat1_tercile)
+
+map_df <- world %>%
+  left_join(tercile_map, by = c("adm0_a3" = "countrycode")) %>%
+
+  mutate(
+    cat1_tercile = as.character(cat1_tercile),
+    cat1_tercile = case_when(
+      is.na(cat1_tercile) ~ "No data",
+      TRUE                ~ cat1_tercile
+    ),
+    cat1_tercile = factor(cat1_tercile,
+                          levels = c("Never treated",
+                                     "Low exposure",
+                                     "Mid exposure",
+                                     "High exposure",
+                                     "No data"))
+  ) %>% 
+    #remove na
+  filter(cat1_tercile != "No data")
+
+map_colors <- c(
+  "Never treated"      = "#d9d9d9",
+  "Low exposure"  = "#9ecae1",
+  "Mid exposure"  = "#f6a623",
+  "High exposure" = "#c0392b",
+  "No data"            = "midnightblue"
+)
+
+fig_map <- ggplot(map_df) +
+  geom_sf(aes(fill = cat1_tercile), color = "white", linewidth = 0.15) +
+  coord_sf(crs = "+proj=robin") +
+  scale_fill_manual(
+    values = map_colors,
+    guide = guide_legend(
+      title          = "Cat 1+ exposure",
+      title.position = "top",
+      nrow           = 2,
+      keywidth       = unit(1.2, "cm"),
+      keyheight      = unit(0.4, "cm")
+    )
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    legend.position   = "bottom",
+    legend.title      = element_text(face = "bold", size = 11),
+    legend.text       = element_text(size = 10),
+    plot.background   = element_rect(fill = "white", color = NA),
+    panel.background  = element_rect(fill = "white", color = NA)
+  )
+
+ggsave("figures/map_cat1_terciles.png",
+       fig_map, width = 5, height = 5, dpi = 300)
+
+fig_map
+```
+
+
+```{r}
+# ------------------------------------------------------------------
+# 8. IRFs: Cat1+ treatment × historical exposure terciles
+# ------------------------------------------------------------------
+
+# Ever-treated: total Cat1+ events per country over the full sample
+data <- data %>%
+  group_by(countrycode) %>%
+  mutate(country_cat1_count = sum(cat1_plus, na.rm = TRUE)) %>%
+  ungroup()
+
+# Terciles only among ever-treated countries (count > 0)
+tercile_breaks <- data %>%
+  filter(country_cat1_count > 0) %>%
+  distinct(countrycode, country_cat1_count) %>%
+  pull(country_cat1_count) %>%
+  quantile(c(1/3, 2/3), na.rm = TRUE)
+
+data <- data %>%
+  mutate(
+    cat1_tercile = case_when(
+      country_cat1_count == 0                          ~ "Never treated",
+      country_cat1_count <= tercile_breaks[1]          ~ "Low exposure",
+      country_cat1_count <= tercile_breaks[2]          ~ "Mid exposure",
+      country_cat1_count >  tercile_breaks[2]          ~ "High exposure"
+    ),
+    cat1_tercile = factor(cat1_tercile,
+                          levels = c("Never treated",
+                                     "Low exposure",
+                                     "Mid exposure",
+                                     "High exposure"))
+  )
+
+cat("\n--- Country Cat1+ exposure distribution ---\n")
+data %>%
+  distinct(countrycode, cat1_tercile, country_cat1_count) %>%
+  count(cat1_tercile) %>%
+  print()
+
+tercile_colors <- c(
+  "Never treated"      = "grey60",
+  "Low exposure"  = "steelblue",
+  "Mid exposure"  = "goldenrod",
+  "High exposure" = "firebrick"
+)
+
+irfs_cat1_tercile <- lp_panel_inter(
+  data         = data,
+  outcome      = outcome,
+  main_var     = "cat1_plus",
+  interact_var = "cat1_tercile",
+  controls     = make_controls("cat1_plus"),
+  horizon      = horizon,
+  fe           = fe,
+  panel_id     = panel_id,
+  vcov_formula = vcov_fm
+) %>%
+  mutate(
+    exposure = factor(category,
+                      levels = c("Never treated",
+                                 "Low exposure",
+                                 "Mid exposure",
+                                 "High exposure"))
+  )
+
+# Print at h = 5
+cat("\n--- Cat1+ × exposure tercile, h=5 ---\n")
+irfs_cat1_tercile %>%
+  filter(horizon == 5) %>%
+  select(exposure, irf_mean, se, irf_down, irf_up) %>%
+  arrange(exposure) %>%
+  as.data.frame() %>%
+  print(digits = 4, row.names = FALSE)
+
+fig_cat1_tercile <- irfs_cat1_tercile %>%
+  ggplot(aes(x = horizon, y = irf_mean,
+             color = exposure, fill = exposure)) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.55, color = "grey40") +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up),
+              alpha = 0.13, color = NA) +
+  geom_line(linewidth = 1.05) +
+  scale_color_manual(values = tercile_colors) +
+  scale_fill_manual(values  = tercile_colors) +
+  scale_x_continuous(breaks = seq(0, horizon, 2)) +
+  scale_y_continuous(labels = pct_labels) +
+  labs(x     = "Horizon (years)",
+       y     = "GDP response",
+       color = "Country Cat1+ exposure",
+       fill  = "Country Cat1+ exposure") +
+  irf_theme +
+  theme(legend.position = "top") +
+  #remove legend
+  theme(legend.position = "none")
+
+
+ggsave("figures/map_cat1_terciles.png",
+       fig_map, width = 7, height = 5, dpi = 300)
+
+ggsave("figures/irf_cat1_exposure_tercile.png",
+       fig_cat1_tercile, width = 7, height = 5, dpi = 300)
+
+fig_combined <- fig_map + fig_cat1_tercile + plot_layout(widths = c(1, 1))
+
+
+ggsave("figures/combined_cat1_tercile.png",
+       fig_combined, width = 10, height = 5, dpi = 300)
+```
+
+
+```{r}
+# ------------------------------------------------------------------
+# IRFs: Cat1+ treatment × country mean maxwind (continuous) terciles
+# ------------------------------------------------------------------
+
+# Country mean of continuous maxwind (all years, regardless of threshold)
+data <- data %>%
+  group_by(countrycode) %>%
+  mutate(country_maxwind_mean = mean(maxwind, na.rm = TRUE)) %>%
+  ungroup()
+
+# Terciles only among countries with any positive maxwind
+tercile_breaks_mw <- data %>%
+  filter(country_maxwind_mean > 1) %>%
+  distinct(countrycode, country_maxwind_mean) %>%
+  pull(country_maxwind_mean) %>%
+  quantile(c(1/3, 2/3), na.rm = TRUE)
+
+data <- data %>%
+  mutate(
+    maxwind_tercile = case_when(
+      country_maxwind_mean == 0                          ~ "Never exposed",
+      country_maxwind_mean <= tercile_breaks_mw[1]      ~ "Low exposure",
+      country_maxwind_mean <= tercile_breaks_mw[2]      ~ "Mid exposure",
+      country_maxwind_mean >  tercile_breaks_mw[2]      ~ "High exposure"
+    ),
+    maxwind_tercile = factor(maxwind_tercile,
+                             levels = c("Never exposed",
+                                        "Low exposure",
+                                        "Mid exposure",
+                                        "High exposure"))
+  )
+
+cat("\n--- Country maxwind (continuous) tercile distribution ---\n")
+data %>%
+  distinct(countrycode, maxwind_tercile, country_maxwind_mean) %>%
+  count(maxwind_tercile) %>%
+  print()
+
+# Sanity check: mean maxwind by tercile
+data %>%
+  distinct(countrycode, maxwind_tercile, country_maxwind_mean) %>%
+  group_by(maxwind_tercile) %>%
+  summarise(
+    n         = n(),
+    mean_mw   = mean(country_maxwind_mean, na.rm = TRUE),
+    min_mw    = min(country_maxwind_mean,  na.rm = TRUE),
+    max_mw    = max(country_maxwind_mean,  na.rm = TRUE)
+  ) %>%
+  print()
+
+maxwind_tercile_colors <- c(
+  "Never exposed" = "grey60",
+  "Low exposure"  = "steelblue",
+  "Mid exposure"  = "goldenrod",
+  "High exposure" = "firebrick"
+)
+
+irfs_maxwind_tercile <- lp_panel_inter(
+  data         = data,
+  outcome      = outcome,
+  main_var     = "maxwind",
+  interact_var = "maxwind_tercile",
+  controls     = make_controls("cat1_plus"),
+  horizon      = horizon,
+  fe           = fe,
+  panel_id     = panel_id,
+  vcov_formula = vcov_fm
+) %>%
+  mutate(
+    exposure = factor(category,
+                      levels = c("Never exposed",
+                                 "Low exposure",
+                                 "Mid exposure",
+                                 "High exposure"))
+  )
+
+# Print at h = 5
+cat("\n--- Cat1+ × maxwind continuous tercile, h=5 ---\n")
+irfs_maxwind_tercile %>%
+  filter(horizon == 5) %>%
+  select(exposure, irf_mean, se, irf_down, irf_up) %>%
+  arrange(exposure) %>%
+  as.data.frame() %>%
+  print(digits = 4, row.names = FALSE)
+
+fig_maxwind_tercile <- irfs_maxwind_tercile %>%
+  ggplot(aes(x = horizon, y = irf_mean,
+             color = exposure, fill = exposure)) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.55, color = "grey40") +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up),
+              alpha = 0.13, color = NA) +
+  geom_line(linewidth = 1.05) +
+  scale_color_manual(values = maxwind_tercile_colors) +
+  scale_fill_manual(values  = maxwind_tercile_colors) +
+  scale_x_continuous(breaks = seq(0, horizon, 2)) +
+  scale_y_continuous(labels = pct_labels) +
+  labs(x     = "Horizon (years)",
+       y     = "GDP response",
+       color = "Country mean wind speed",
+       fill  = "Country mean wind speed") +
+  irf_theme +
+  theme(legend.position = "top")
+
+fig_maxwind_tercile
+
+ggsave("figures/irf_cat1_maxwind_continuous_tercile.png",
+       fig_maxwind_tercile, width = 7, height = 5, dpi = 300)
+```
+
+```{r}
+# ------------------------------------------------------------------
+# IRFs: Cat1+ treatment × country maxwind_95 exposure (binary)
+# ------------------------------------------------------------------
+data <- data %>%
+  group_by(countrycode) %>%
+  mutate(country_maxwind95_rate = mean(maxwind_95, na.rm = TRUE)) %>%
+  ungroup()
+
+median_rate <- data %>%
+  filter(country_maxwind95_rate > 0) %>%
+  distinct(countrycode, country_maxwind95_rate) %>%
+  pull(country_maxwind95_rate) %>%
+  median(na.rm = TRUE)
+
+data <- data %>%
+  mutate(
+    maxwind95_exposure = case_when(
+      country_maxwind95_rate == 0           ~ "Never hit",
+      country_maxwind95_rate <= median_rate ~ "Low exposure",
+      country_maxwind95_rate >  median_rate ~ "High exposure"
+    ),
+    maxwind95_exposure = factor(maxwind95_exposure,
+                                levels = c("Never hit",
+                                           "Low exposure",
+                                           "High exposure"))
+  )
+
+cat("\n--- Country maxwind_95 binary exposure distribution ---\n")
+data %>%
+  distinct(countrycode, maxwind95_exposure, country_maxwind95_rate) %>%
+  count(maxwind95_exposure) %>%
+  print()
+
+data %>%
+  distinct(countrycode, maxwind95_exposure, country_maxwind95_rate) %>%
+  group_by(maxwind95_exposure) %>%
+  summarise(
+    n         = n(),
+    mean_rate = mean(country_maxwind95_rate, na.rm = TRUE),
+    min_rate  = min(country_maxwind95_rate,  na.rm = TRUE),
+    max_rate  = max(country_maxwind95_rate,  na.rm = TRUE)
+  ) %>%
+  print()
+
+exposure_colors <- c(
+  "Never hit"     = "#d9d9d9",
+  "Low exposure"  = "#9ecae1",
+  "High exposure" = "#c0392b"
+)
+
+# ------------------------------------------------------------------
+# IRF — no legend
+# ------------------------------------------------------------------
+irfs_maxwind95_exposure <- lp_panel_inter(
+  data         = data,
+  outcome      = outcome,
+  main_var     = "cat1_plus",
+  interact_var = "maxwind95_exposure",
+  controls     = make_controls("cat1_plus"),
+  horizon      = horizon,
+  fe           = fe,
+  panel_id     = panel_id,
+  vcov_formula = vcov_fm
+) %>%
+  mutate(
+    exposure = factor(category,
+                      levels = c("Never hit",
+                                 "Low exposure",
+                                 "High exposure"))
+  )
+
+cat("\n--- Cat1+ × maxwind_95 binary exposure, h=5 ---\n")
+irfs_maxwind95_exposure %>%
+  filter(horizon == 5) %>%
+  select(exposure, irf_mean, se, irf_down, irf_up) %>%
+  arrange(exposure) %>%
+  as.data.frame() %>%
+  print(digits = 4, row.names = FALSE)
+
+fig_maxwind95_exposure <- irfs_maxwind95_exposure %>%
+  ggplot(aes(x = horizon, y = irf_mean,
+             color = exposure, fill = exposure)) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.55, color = "grey40") +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up),
+              alpha = 0.13, color = NA) +
+  geom_line(linewidth = 1.05) +
+  scale_color_manual(values = exposure_colors) +
+  scale_fill_manual(values  = exposure_colors) +
+  scale_x_continuous(breaks = seq(0, horizon, 2)) +
+  scale_y_continuous(labels = pct_labels) +
+  labs(x     = "Horizon (years)",
+       y     = "GDP response",
+       color = "Country TC exposure",
+       fill  = "Country TC exposure") +
+  irf_theme +
+  theme(legend.position = "none")   # <-- no legend on IRF
+
+# ------------------------------------------------------------------
+# Map — with legend
+# ------------------------------------------------------------------
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+map_df_mw95 <- world %>%
+  left_join(
+    data %>% distinct(countrycode, maxwind95_exposure),
+    by = c("adm0_a3" = "countrycode")
+  ) %>%
+  mutate(
+    maxwind95_exposure = as.character(maxwind95_exposure),
+    maxwind95_exposure = case_when(
+      is.na(maxwind95_exposure) ~ "No data",
+      TRUE                      ~ maxwind95_exposure
+    ),
+    maxwind95_exposure = factor(maxwind95_exposure,
+                                levels = c("Never hit",
+                                           "Low exposure",
+                                           "High exposure",
+                                           "No data"))
+  ) %>%
+  filter(maxwind95_exposure != "No data")
+
+fig_map_mw95 <- ggplot(map_df_mw95) +
+  geom_sf(aes(fill = maxwind95_exposure), color = "white", linewidth = 0.15) +
+  coord_sf(crs = "+proj=robin") +
+  scale_fill_manual(
+    values = exposure_colors,
+    guide  = guide_legend(
+      title          = "Country TC exposure",
+      title.position = "top",
+      nrow           = 1,
+      keywidth       = unit(1.2, "cm"),
+      keyheight      = unit(0.4, "cm")
+    )
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    legend.position  = "bottom",
+    legend.title     = element_text(face = "bold", size = 11),
+    legend.text      = element_text(size = 10),
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# ------------------------------------------------------------------
+# Combined: map (left, with legend) + IRF (right, no legend)
+# ------------------------------------------------------------------
+ggsave("figures/map_maxwind95_binary.png",
+       fig_map_mw95, width = 7, height = 5, dpi = 300)
+
+ggsave("figures/irf_cat1_maxwind95_binary.png",
+       fig_maxwind95_exposure, width = 7, height = 5, dpi = 300)
+
+fig_combined_mw95 <- fig_map_mw95 + fig_maxwind95_exposure + plot_layout(widths = c(1, 1))
+
+ggsave("figures/combined_maxwind95_binary.png",
+       fig_combined_mw95, width = 10, height = 5, dpi = 300)
+
+fig_combined_mw95
+```
+
+
+# Compounding
+
+
+```{r}
+
+data <- data %>%
+  group_by(countrycode) %>%
+  mutate(
+    cat1_plus_lag1 = lag(cat1_plus, 1, default = 0),
+    cat1_plus_lag2 = lag(cat1_plus, 2, default = 0),
+    cat1_plus_lag3 = lag(cat1_plus, 3, default = 0),
+    cat1_plus_lag4 = lag(cat1_plus, 4, default = 0),
+    cat1_plus_lag5 = lag(cat1_plus, 5, default = 0)
+  ) %>%
+  ungroup()
+
+
+ever_treated_countries <- data %>%
+  filter(maxwind > 0) %>%
+  pull(countrycode) %>%
+  unique() %>%
+  sort()
+
+d_treated <- data %>%
+  filter(countrycode %in% ever_treated_countries)
+
+
+
+```
+
+
+
+
+
