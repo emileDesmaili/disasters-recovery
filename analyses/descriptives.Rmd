@@ -356,3 +356,98 @@ wind_descriptives
 
 
 
+```{r}
+# Within-country autocorrelation structure of annual max wind speed.
+# Within-country autocorrelation structure of annual max wind speed.
+
+max_lag <- 10
+
+# ── Compute within-country ACF for each lag ──────────────────────────────────
+acf_panel <- data %>%
+  filter(year >= 1970, year <= 2014, maxwind > 0) %>%
+  group_by(countrycode) %>%
+  filter(n() >= 10) %>%                         # min observations per country
+  arrange(year) %>%
+  summarise(
+    map_dfr(1:max_lag, function(k) {
+      x  <- maxwind
+      xk <- lag(maxwind, k)
+      ok <- !is.na(x) & !is.na(xk)
+      tibble(
+        lag = k,
+        r   = if (sum(ok) >= 5) cor(x[ok], xk[ok]) else NA_real_
+      )
+    }),
+    .groups = "drop"
+  )
+
+# ── Summary: mean + CI across countries at each lag ──────────────────────────
+acf_summary <- acf_panel %>%
+  group_by(lag) %>%
+  summarise(
+    mean_r = mean(r, na.rm = TRUE),
+    sd_r   = sd(r,   na.rm = TRUE),
+    n      = sum(!is.na(r)),
+    se_r   = sd_r / sqrt(n),
+    lo     = mean_r - 1.96 * se_r,
+    hi     = mean_r + 1.96 * se_r,
+    .groups = "drop"
+  )
+
+# ── Bartlett 95% significance band (white noise threshold) ───────────────────
+n_avg   <- mean(acf_summary$n)
+bart_ci <- 1.96 / sqrt(n_avg)
+
+# ── Plot ─────────────────────────────────────────────────────────────────────
+fig_acf <- ggplot(acf_summary, aes(x = lag)) +
+
+  geom_hline(yintercept = 0, linewidth = 0.5, color = "grey40") +
+
+  # Country-level ACF as thin transparent lines
+  geom_line(
+    data  = acf_panel %>% filter(!is.na(r)),
+    aes(y = r, group = countrycode),
+    color = "steelblue", linewidth = 0.25, alpha = 0.15
+  ) +
+
+  # CI ribbon
+  geom_ribbon(aes(ymin = lo, ymax = hi),
+              fill = "steelblue", alpha = 0.25) +
+
+  # Mean line
+  geom_line(aes(y = mean_r),
+            color = "steelblue", linewidth = 1.3) +
+  geom_point(aes(y = mean_r),
+             color = "steelblue", size = 2.8, shape = 21,
+             fill = "white", stroke = 1.2) +
+
+  # Significance band on top
+  annotate("rect",
+           xmin = 0.5, xmax = max_lag + 0.5,
+           ymin = -bart_ci, ymax = bart_ci,
+           fill = "grey50", alpha = 0.12, color = "grey40",
+           linewidth = 0.4, linetype = "dashed") +
+  annotate("text",
+           x = max_lag, y = bart_ci + 0.015,
+           label = "95% white-noise band",
+           hjust = 1, size = 3.2, color = "grey40") +
+
+  scale_x_continuous(breaks = 1:max_lag) +
+  scale_y_continuous(limits = c(-0.35, 0.65),
+                     breaks = seq(-0.2, 0.6, 0.2)) +
+  labs(
+    title    = "Within-country autocorrelation of annual max wind speed",
+    subtitle = "Thin lines = country-level ACF; thick line = cross-country mean \u00b1 95% CI",
+    x        = "Lag (years)",
+    y        = "Correlation"
+  ) +
+  irf_theme
+
+ggsave("figures/acf_maxwind_panel.png",
+       fig_acf, width = 8, height = 5, dpi = 300)
+
+fig_acf
+```
+
+
+

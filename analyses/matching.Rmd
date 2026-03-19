@@ -1040,11 +1040,6 @@ fig_continent
 
 
 
-# Compounding
-
-```{r}
-
-```
 
 
 

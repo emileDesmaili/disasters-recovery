@@ -114,6 +114,29 @@ data <- data %>%
     by = "countrycode"
   )
 
+```{r}
+
+data <- data %>%
+  group_by(countrycode) %>%
+  mutate(
+    cat1_plus_lag1 = lag(cat1_plus, 1, default = 0),
+    cat1_plus_lag2 = lag(cat1_plus, 2, default = 0),
+    cat1_plus_lag3 = lag(cat1_plus, 3, default = 0),
+    cat1_plus_lag4 = lag(cat1_plus, 4, default = 0),
+    cat1_plus_lag5 = lag(cat1_plus, 5, default = 0)
+  ) %>%
+  ungroup()
+
+
+ever_treated_countries <- data %>%
+  filter(maxwind > 0) %>%
+  pull(countrycode) %>%
+  unique() %>%
+  sort()
+
+d_treated <- data %>%
+  filter(countrycode %in% ever_treated_countries)
+
 ```
 
 
@@ -582,37 +605,321 @@ fig_combined_mw95
 ```
 
 
-# Compounding
+# State Dependent
+
 
 
 ```{r}
+# ── State-dependent LP: shock × recovery state ───────────────────────────────
+# Condition on where the economy sits at time of shock, not on whether
+# a prior shock occurred. Follows Ramey & Zubairy (2018).
+# Three specs: binary 1yr, binary 2yr, continuous (terciles)
 
 data <- data %>%
   group_by(countrycode) %>%
   mutate(
-    cat1_plus_lag1 = lag(cat1_plus, 1, default = 0),
-    cat1_plus_lag2 = lag(cat1_plus, 2, default = 0),
-    cat1_plus_lag3 = lag(cat1_plus, 3, default = 0),
-    cat1_plus_lag4 = lag(cat1_plus, 4, default = 0),
-    cat1_plus_lag5 = lag(cat1_plus, 5, default = 0)
+    # State 1: contracting in t-1
+    contracting      = as.integer(lag(gdp_diff, 1, default = 0) < 0),
+
+    # State 2: contracting in both t-1 and t-2 (sustained weakness)
+    contracting_2yr  = as.integer(
+      lag(gdp_diff, 1, default = 0) < 0 &
+      lag(gdp_diff, 2, default = 0) < 0
+    ),
+
+    # Continuous: lagged growth standardized
+    lagged_growth     = lag(gdp_diff, 1, default = 0),
+    lagged_growth_std = lagged_growth / sd(lagged_growth, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    growth_tercile = case_when(
+      lagged_growth_std <= quantile(lagged_growth_std, 1/3, na.rm = TRUE) ~ "Low growth (bottom tercile)",
+      lagged_growth_std <= quantile(lagged_growth_std, 2/3, na.rm = TRUE) ~ "Mid growth",
+      TRUE                                                                  ~ "High growth (top tercile)"
+    ),
+    growth_tercile = factor(growth_tercile,
+                            levels = c("Low growth (bottom tercile)",
+                                       "Mid growth",
+                                       "High growth (top tercile)"))
+  )
+
+cat(sprintf(
+  "State distribution at shock years:\n  contracting (1yr): %d | expanding: %d\n  contracting (2yr): %d | not: %d\n",
+  sum(d_treated$contracting[d_treated$maxwind_95 == 1],      na.rm = TRUE),
+  sum(!d_treated$contracting[d_treated$maxwind_95 == 1],     na.rm = TRUE),
+  sum(d_treated$contracting_2yr[d_treated$maxwind_95 == 1],  na.rm = TRUE),
+  sum(!d_treated$contracting_2yr[d_treated$maxwind_95 == 1], na.rm = TRUE)
+))
+
+# ── Shared LP settings ───────────────────────────────────────────────────────
+lp_controls <- "l(gdp_diff, 1:2) + l(maxwind_95, 1:2)"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
+
+run_state_irf <- function(interact_var, facet_label) {
+  lp_panel_inter(
+    data         = data,
+    outcome      = outcome,
+    main_var     = "maxwind_95",
+    interact_var = interact_var,
+    controls     = lp_controls,
+    horizon      = horizon,
+    fe           = lp_fe,
+    panel_id     = panel_id,
+    vcov_formula = vcov_fm
+  ) %>%
+    mutate(state = category, facet = facet_label)
+}
+
+# ── Spec A: binary — contracting in t-1 ──────────────────────────────────────
+irf_state_1yr <- run_state_irf("contracting", "A  Contracting in t\u22121") %>%
+  mutate(state = recode(state, "0" = "Expanding", "1" = "Contracting"))
+
+# ── Spec B: binary — contracting in t-1 and t-2 ──────────────────────────────
+irf_state_2yr <- run_state_irf("contracting_2yr",
+                                "B  Contracting in t\u22121 and t\u22122") %>%
+  mutate(state = recode(state, "0" = "Expanding", "1" = "Contracting"))
+
+# ── Spec C: continuous — prior growth tercile ────────────────────────────────
+irf_state_cont <- run_state_irf("growth_tercile",
+                                 "C  Prior growth tercile (continuous)")
+
+# ── Print summary at h = 5 ───────────────────────────────────────────────────
+cat("\n--- State-dependent IRF at h = 5 ---\n")
+bind_rows(irf_state_1yr, irf_state_2yr, irf_state_cont) %>%
+  filter(horizon == 5) %>%
+  select(facet, state, irf_mean, se, irf_down, irf_up) %>%
+  arrange(facet, state) %>%
+  as.data.frame() %>%
+  print(digits = 3, row.names = FALSE)
+
+# ── Combined 3-panel plot ─────────────────────────────────────────────────────
+state_colors <- c(
+  "Expanding"                   = "steelblue",
+  "Contracting"                 = "firebrick",
+  "Low growth (bottom tercile)" = "firebrick",
+  "Mid growth"                  = "goldenrod3",
+  "High growth (top tercile)"   = "steelblue"
+)
+
+fig_state <- bind_rows(irf_state_1yr, irf_state_2yr, irf_state_cont) %>%
+  mutate(facet = factor(facet, levels = c(
+    "A  Contracting in t\u22121",
+    "B  Contracting in t\u22121 and t\u22122",
+    "C  Prior growth tercile (continuous)"
+  ))) %>%
+  ggplot(aes(x = horizon, y = irf_mean,
+             color = state, fill = state)) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up),
+              alpha = 0.13, color = NA) +
+  geom_line(linewidth = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.55, color = "grey40") +
+  facet_wrap(~facet, ncol = 3) +
+  scale_color_manual(values = state_colors, name = NULL) +
+  scale_fill_manual(values  = state_colors, name = NULL) +
+  scale_x_continuous(breaks = seq(0, horizon, 2)) +
+  scale_y_continuous(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(x = "Horizon (years)", y = "GDP response") +
+  irf_theme +
+  theme(legend.position = "bottom")
+
+ggsave("figures/irf_state_dependent.png",
+       fig_state, width = 13, height = 5, dpi = 300)
+
+fig_state
+```
+
+# Compounding
+
+```{r}
+# Compound TC effects: how a new severe TC affects recovery depending on prior shock history.
+
+d_treated <- d_treated %>%
+  group_by(countrycode) %>%
+  mutate(
+    # ── Prior shock indicators ───────────────────────────────────────────────
+    # Was there a severe TC in the past 1, 2, or 3 years?
+    shock_lag1     = lag(maxwind_95, 1, default = 0L),
+    shock_lag2     = lag(maxwind_95, 2, default = 0L),
+    shock_lag3     = lag(maxwind_95, 3, default = 0L),
+
+    # Binary compound flags
+    compound_1yr   = as.integer(maxwind_95 == 1 & shock_lag1 == 1),
+    compound_2yr   = as.integer(maxwind_95 == 1 & (shock_lag1 | shock_lag2)),
+    compound_3yr   = as.integer(maxwind_95 == 1 & (shock_lag1 | shock_lag2 | shock_lag3)),
+    isolated       = as.integer(maxwind_95 == 1 & !shock_lag1 & !shock_lag2 & !shock_lag3),
+
+    # Cumulative exposure: how many severe TCs in the past 3 years?
+    prior_shocks_3yr = shock_lag1 + shock_lag2 + shock_lag3,
+    prior_shocks_3yr = factor(prior_shocks_3yr,
+                              levels = 0:3,
+                              labels = c("0 prior", "1 prior", "2 prior", "3 prior")),
+
+    # Time since last shock (years) — NA if never shocked before
+    years_since_shock = {
+      ys <- rep(NA_real_, n())
+      last <- NA_real_
+      for (i in seq_along(maxwind_95)) {
+        if (!is.na(shock_lag1[i]) && shock_lag1[i] == 1) last <- 0
+        else if (!is.na(last)) last <- last + 1
+        ys[i] <- last
+      }
+      ys
+    },
+    # Bin time since last shock
+    recovery_stage = case_when(
+      is.na(years_since_shock)    ~ "No prior shock",
+      years_since_shock == 0      ~ "Immediate (0y gap)",
+      years_since_shock <= 2      ~ "Early recovery (1-2y gap)",
+      years_since_shock <= 5      ~ "Mid recovery (3-5y gap)",
+      TRUE                        ~ "Full recovery (6y+ gap)"
+    ),
+    recovery_stage = factor(recovery_stage, levels = c(
+      "No prior shock",
+      "Immediate (0y gap)",
+      "Early recovery (1-2y gap)",
+      "Mid recovery (3-5y gap)",
+      "Full recovery (6y+ gap)"
+    ))
   ) %>%
   ungroup()
 
+cat("── Compound event counts ───────────────────────────────────────────────\n")
+cat(sprintf("  Isolated (no shock in t-1 to t-3): %d\n",  sum(d_treated$isolated,     na.rm = TRUE)))
+cat(sprintf("  Compound 1yr (shock in t-1):        %d\n",  sum(d_treated$compound_1yr, na.rm = TRUE)))
+cat(sprintf("  Compound 2yr (shock in t-1 or t-2): %d\n",  sum(d_treated$compound_2yr, na.rm = TRUE)))
+cat(sprintf("  Compound 3yr (shock in t-1 to t-3): %d\n",  sum(d_treated$compound_3yr, na.rm = TRUE)))
+cat("────────────────────────────────────────────────────────────────────────\n")
 
-ever_treated_countries <- data %>%
-  filter(maxwind > 0) %>%
-  pull(countrycode) %>%
-  unique() %>%
-  sort()
+# ── Shared LP settings ───────────────────────────────────────────────────────
+lp_controls <- "l(gdp_diff, 1:2) + l(maxwind_95, 1:2)"
+lp_fe       <- "countrycode[year] + countrycode[year2] + region^year"
 
-d_treated <- data %>%
-  filter(countrycode %in% ever_treated_countries)
+run_inter_irf <- function(interact_var, facet_label) {
+  lp_panel_inter(
+    data         = d_treated,
+    outcome      = outcome,
+    main_var     = "maxwind_95",
+    interact_var = interact_var,
+    controls     = lp_controls,
+    horizon      = horizon,
+    fe           = lp_fe,
+    panel_id     = panel_id,
+    vcov_formula = vcov_fm
+  ) %>%
+    mutate(group = category, facet = facet_label)
+}
+
+# ── Spec A: shock × prior shock in t-1 (strict 1yr window) ──────────────────
+irf_compound_1yr <- run_inter_irf("shock_lag1", "Prior shock in t\u22121") %>%
+  mutate(group = recode(group,
+    "0" = "No prior shock",
+    "1" = "Prior shock in t\u22121"
+  ))
+
+# ── Spec B: shock × cumulative prior shocks (0 / 1 / 2-3) ───────────────────
+d_treated <- d_treated %>%
+  mutate(
+    prior_shocks_bin = case_when(
+      prior_shocks_3yr == "0 prior" ~ "0 prior shocks",
+      prior_shocks_3yr == "1 prior" ~ "1 prior shock",
+      TRUE                          ~ "2-3 prior shocks"
+    ),
+    prior_shocks_bin = factor(prior_shocks_bin,
+                              levels = c("0 prior shocks",
+                                         "1 prior shock",
+                                         "2-3 prior shocks"))
+  )
+
+irf_compound_cum <- run_inter_irf("prior_shocks_bin",
+                                   "# prior shocks in t\u22121 to t\u22123")
+
+# ── Spec C: shock × time since last shock (recovery stage) ──────────────────
+irf_compound_gap <- run_inter_irf("recovery_stage",
+                                   "C  Time since last shock") %>%
+  mutate(group = factor(group, levels = c(
+    "Immediate (0y gap)",
+    "Early recovery (1-2y gap)",
+    "Mid recovery (3-5y gap)",
+    "Full recovery (6y+ gap)",
+        "No prior shock"
+  )))
+
+# ── Print summary at h = 5 ──────────────────────────────────────────────────
+cat("\n--- Compound TC IRFs at h = 5 ---\n")
+bind_rows(irf_compound_1yr, irf_compound_cum, irf_compound_gap) %>%
+  filter(horizon == 5) %>%
+  select(facet, group, irf_mean, se, irf_down, irf_up) %>%
+  arrange(facet, group) %>%
+  as.data.frame() %>%
+  print(digits = 3, row.names = FALSE)
+
+# ── Plot ─────────────────────────────────────────────────────────────────────
+irf_base <- function(df, color_map) {
+  ggplot(df, aes(x = horizon, y = irf_mean, color = group, fill = group)) +
+    geom_ribbon(aes(ymin = irf_down, ymax = irf_up),
+                alpha = 0.13, color = NA) +
+    geom_line(linewidth = 1.1) +
+    geom_hline(yintercept = 0, linetype = "dashed",
+               linewidth = 0.55, color = "grey40") +
+    scale_color_manual(values = color_map, name = NULL) +
+    scale_fill_manual(values  = color_map, name = NULL) +
+    scale_x_continuous(breaks = seq(0, horizon, 2)) +
+    scale_y_continuous(labels = function(x) paste0(round(100 * x, 1), "%")) +
+    labs(x = "Horizon (years)", y = "GDP response") +
+    irf_theme +
+    theme(legend.position  = "bottom",
+          legend.text      = element_text(size = 10),
+          legend.key.width = unit(1.2, "cm")) +
+    guides(color = guide_legend(nrow = 2, byrow = TRUE),
+           fill  = guide_legend(nrow = 2, byrow = TRUE))
+}
+
+# ── Fig A: prior shock in t-1 ────────────────────────────────────────────────
+pa <- irf_base(
+  irf_compound_1yr,
+  c("No prior shock"          = "steelblue",
+    "Prior shock in t\u22121" = "firebrick")
+) + labs(title = "Prior shock in t\u22121")
 
 
+# ── Fig B: cumulative prior shocks ───────────────────────────────────────────
+pb <- irf_base(
+  irf_compound_cum,
+  c("0 prior shocks"   = "steelblue",
+    "1 prior shock"    = "goldenrod3",
+    "2-3 prior shocks" = "firebrick")
+) + labs(title = "# prior shocks in t\u22121 to t\u22123")
+
+
+# ── Fig C: faceted by recovery stage, no legend ──────────────────────────────
+colors_gap <- c(
+  "Immediate (0y gap)"        = "#8B0000",
+  "Early recovery (1-2y gap)" = "firebrick",
+  "Mid recovery (3-5y gap)"   = "goldenrod3",
+  "Full recovery (6y+ gap)"   = "#2e8b57",
+    "No prior shock"            = "steelblue"
+)
+
+pc <- irf_base(
+  irf_compound_gap %>%
+    mutate(group = factor(group, levels = names(colors_gap))),
+  colors_gap
+) +
+  facet_wrap(~group, ncol = 5) +
+  labs(title = "IRF by recovery stage at time of new shock") +
+  theme(legend.position = "none")
+
+ggsave("figures/irf_compound_stages.png",
+       pc, width = 13, height = 5, dpi = 300)
+
+fig_compound <- pa + pb  + plot_layout(ncol = 2)
+
+ggsave("figures/irf_compound_effects.png",
+       fig_compound, width = 10, height = 5, dpi = 300)
 
 ```
-
-
 
 
 

@@ -107,6 +107,16 @@ data <- data %>%
   )
 
 
+ever_treated_countries <- data %>%
+  filter(maxwind > 0) %>%
+  pull(countrycode) %>%
+  unique() %>%
+  sort()
+
+d_treated <- data %>%
+  filter(countrycode %in% ever_treated_countries)
+
+
 
 ```
 
@@ -127,8 +137,8 @@ irf_list <- vector("list", H + 1)
 
 for (h in 0:H) {
   fe_model <- feols(
-    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_95) | countrycode[year] + countrycode[year2] + year^region,
-    data = data,
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_95) + l(gdp_diff,1:2) +l(maxwind_95,1:2) | countrycode[year] + countrycode[year2] + year^region,
+    data = d_treated,
     panel.id = panel_id,
     vcov = vcov_fm
   )
@@ -208,6 +218,416 @@ ggsave("figures/map_recovery_time_LP.png",
 
 fig_recovery_map
 ```
+
+
+
+```{r}
+# Country-level recovery time map using smoothed LP (B-spline on horizon).
+
+H        <- 10
+panel_id <- c("countrycode", "year")
+vcov_fm  <- DK ~ year
+
+# ── Estimate raw country-level IRFs ─────────────────────────────────────────
+irf_list <- vector("list", H + 1)
+for (h in 0:H) {
+  fe_model <- feols(
+    f(loggdp, h) - l(loggdp, 1) ~
+      i(countrycode, maxwind_95) + l(gdp_diff, 1:2) + l(maxwind_95, 1:2) |
+      countrycode[year] + countrycode[year2] + year^region,
+    data     = d_treated,
+    panel.id = panel_id,
+    vcov     = vcov_fm
+  )
+
+  coef_df <- data.frame(
+    horizon  = h,
+    term     = names(coef(fe_model)),
+    estimate = coef(fe_model)
+  )
+
+  irf_list[[h + 1]] <- coef_df %>%
+    filter(str_detect(term, "::")) %>%
+    mutate(country = str_match(term, ".*::(.*?):.*")[, 2])
+}
+
+irfs <- bind_rows(irf_list)
+
+# ── Smooth each country's IRF over horizon via B-spline ──────────────────────
+# Fit a natural cubic spline in horizon for each country,
+# then predict on a fine grid to recover a smooth IRF path.
+
+horizons_fine <- seq(0, H, by = 0.1)
+
+irfs_smooth <- irfs %>%
+  group_by(country) %>%
+  filter(n() == H + 1) %>%                        # need all horizons
+  group_modify(~ {
+    fit <- smooth.spline(.x$horizon, .x$estimate,
+                         df = 5)                   # 5 df = moderate smoothing
+    tibble(
+      horizon  = horizons_fine,
+      estimate = predict(fit, horizons_fine)$y
+    )
+  }) %>%
+  ungroup()
+
+# ── Recovery time from smoothed IRF ─────────────────────────────────────────
+irf_recovery_smooth <- irfs_smooth %>%
+  group_by(country) %>%
+  arrange(horizon) %>%
+  summarise(
+    first_negative  = if (any(estimate < 0)) min(horizon[estimate < 0])       else NA_real_,
+    first_recovered = if (!is.na(first_negative) &
+                          any(estimate >= 0 & horizon > first_negative))
+                        min(horizon[estimate >= 0 & horizon > first_negative]) else NA_real_,
+    recovery_time   = case_when(
+      is.na(first_negative)  ~ -1,
+      is.na(first_recovered) ~ H + 1,
+      TRUE                   ~ round(first_recovered - first_negative, 1)
+    ),
+    .groups = "drop"
+  )
+
+cat("── Recovery time distribution (smoothed LP) ────────────────────────────\n")
+print(table(irf_recovery_smooth$recovery_time))
+
+# ── Map ──────────────────────────────────────────────────────────────────────
+world_joined <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery_smooth, by = c("adm0_a3" = "country")) %>%
+  filter(name != "Antarctica")
+
+map_breaks <- c(0, 1, 2, 3, 5, 7, 10, 12)
+map_labels <- c("0", "1", "2", "3", "5", "7", "10", "10+")
+
+fig_recovery_map_smooth <- ggplot(world_joined) +
+  geom_sf(aes(fill = recovery_time), color = "white", linewidth = 0.1) +
+  scale_fill_stepsn(
+    colours  = rev(RColorBrewer::brewer.pal(9, "Spectral")),
+    breaks   = map_breaks,
+    limits   = c(0, 12),
+    labels   = map_labels,
+    na.value = "grey90",
+    name     = "Years to recovery",
+    guide    = guide_colorsteps(
+      barheight      = unit(3.5, "cm"),
+      barwidth       = unit(0.6, "cm"),
+      show.limits    = TRUE,
+      title.position = "top"
+    )
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void(base_size = 14) +
+  theme(
+    legend.position  = "right",
+    legend.direction = "vertical",
+    legend.title     = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 11)
+  )
+
+ggsave("figures/map_recovery_time_smooth_LP.png",
+       fig_recovery_map_smooth, width = 8, height = 5, dpi = 300)
+
+fig_recovery_map_smooth
+```
+
+
+```{r}
+# Raw vs smoothed country-level IRFs for selected countries.
+
+selected_countries <- c("USA", "PHL", "MEX", "DOM", "JPN", "AUS",
+                         "IND", "CHN", "BRA", "MDG","CAN")
+
+# ── Raw IRF (discrete horizons) ──────────────────────────────────────────────
+irfs_raw_plot <- irfs %>%
+  filter(country %in% selected_countries) %>%
+  mutate(type = "Raw LP")
+
+# ── Smooth IRF (fine grid) ───────────────────────────────────────────────────
+irfs_smooth_plot <- irfs_smooth %>%
+  filter(country %in% selected_countries) %>%
+  mutate(type = "Smooth LP")
+
+# ── Recovery time annotations ────────────────────────────────────────────────
+recovery_annot <- irf_recovery_smooth %>%
+  filter(country %in% selected_countries) %>%
+  mutate(
+    label = case_when(
+      recovery_time == -1    ~ "no drop",
+      recovery_time == H + 1 ~ paste0(">", H, "y"),
+      TRUE                   ~ paste0(recovery_time, "y")
+    )
+  )
+
+# ── Plot ─────────────────────────────────────────────────────────────────────
+fig_country_irfs <- ggplot() +
+
+  # Zero line
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.5, color = "grey40") +
+
+  # Raw IRF — points + line
+  geom_line(
+    data = irfs_raw_plot,
+    aes(x = horizon, y = estimate),
+    color = "grey60", linewidth = 0.7, linetype = "solid"
+  ) +
+  geom_point(
+    data = irfs_raw_plot,
+    aes(x = horizon, y = estimate),
+    color = "grey50", size = 1.4, shape = 16
+  ) +
+
+  # Smooth IRF — colored line
+  geom_line(
+    data = irfs_smooth_plot,
+    aes(x = horizon, y = estimate),
+    color = "steelblue", linewidth = 1.2
+  ) +
+
+  # Recovery time label
+  geom_text(
+    data = recovery_annot,
+    aes(label = paste0("T* = ", label)),
+    x = H - 0.5, y = Inf,
+    hjust = 1, vjust = 1.6,
+    size = 3, fontface = "bold", color = "steelblue"
+  ) +
+
+  facet_wrap(~country, ncol = 5, scales = "free_y") +
+  scale_x_continuous(breaks = seq(0, H, 2)) +
+  scale_y_continuous(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(
+    title    = "Raw vs smoothed country-level IRF",
+    subtitle = "Grey = raw LP; blue = smooth spline (df=5); T* = years to recovery",
+    x        = "Horizon (years)",
+    y        = "GDP response"
+  ) +
+  irf_theme +
+  theme(strip.text = element_text(face = "bold", size = 10))
+
+ggsave("figures/irf_country_raw_vs_smooth.png",
+       fig_country_irfs, width = 14, height = 6, dpi = 300)
+
+fig_country_irfs
+```
+
+
+
+
+
+# TWO STAGE
+
+```{r}
+# Two-stage country IRFs: (1) residualize loggdp on FEs + trends,
+# (2) estimate per-country LP of maxwind_95 on residualized outcome.
+
+# ── Stage 1: Residualize loggdp onto FEs and country-specific trends ─────────
+d_treated <- d_treated %>%
+  mutate(
+    loggdp_resid = resid(lm(
+      loggdp ~ countrycode + countrycode:year + countrycode:year2 + region:factor(year),
+      data = .,
+      na.action = na.exclude
+    ))
+  )
+
+cat(sprintf("Residualization R²: %.3f\n", 1 - var(resid(fe_resid)) / var(data$loggdp, na.rm = TRUE)))
+
+# ── Stage 2: Per-country LP on residualized outcome ──────────────────────────
+H           <- 10
+horizons_fine <- seq(0, H, by = 0.1)
+
+countries_est <- d_treated %>%
+  filter(!is.na(loggdp_resid), !is.na(maxwind_95)) %>%
+  group_by(countrycode) %>%
+  filter(
+    sum(maxwind_95, na.rm = TRUE) >= 2,   # at least 2 shock events
+    n() >= 15                              # at least 15 years of data
+  ) %>%
+  pull(countrycode) %>%
+  unique()
+
+cat(sprintf("Countries with sufficient data: %d\n", length(countries_est)))
+
+# Estimate one LP per country per horizon
+irf_list <- vector("list", length(countries_est))
+
+for (i in seq_along(countries_est)) {
+  cty  <- countries_est[i]
+  d_c  <- d_treated %>%
+    filter(countrycode == cty) %>%
+    arrange(year) %>%
+    mutate(
+      gdp_resid_diff = loggdp_resid - lag(loggdp_resid, 1)
+    )
+
+  coefs <- map_dfr(0:H, function(h) {
+    y_h <- lead(d_c$loggdp_resid, h) - lag(d_c$loggdp_resid, 1)
+
+    # Controls: lagged residual growth + lagged shock
+    df_h <- data.frame(
+      y        = y_h,
+      shock    = d_c$maxwind_95,
+      lag1_dy  = lag(d_c$gdp_resid_diff, 1),
+      lag2_dy  = lag(d_c$gdp_resid_diff, 2),
+      lag1_d   = lag(d_c$maxwind_95, 1),
+      lag2_d   = lag(d_c$maxwind_95, 2)
+    ) %>% filter(complete.cases(.))
+
+    if (nrow(df_h) < 8 || var(df_h$shock) == 0) return(NULL)
+
+    tryCatch({
+      mod  <- lm(y ~ shock + lag1_dy + lag2_dy + lag1_d + lag2_d, data = df_h)
+      beta <- coef(mod)["shock"]
+      se   <- sqrt(vcov(mod)["shock", "shock"])
+      tibble(
+        horizon  = h,
+        estimate = beta,
+        se       = se,
+        lo       = beta - 1.96 * se,
+        hi       = beta + 1.96 * se
+      )
+    }, error = function(e) NULL)
+  })
+
+  if (nrow(coefs) == H + 1)
+    irf_list[[i]] <- coefs %>% mutate(country = cty)
+}
+
+irfs_2stage <- bind_rows(irf_list)
+cat(sprintf("Countries with complete IRFs: %d\n", n_distinct(irfs_2stage$country)))
+
+# ── Smooth each country's IRF ─────────────────────────────────────────────────
+irfs_2stage_smooth <- irfs_2stage %>%
+  group_by(country) %>%
+  group_modify(~ {
+    fit <- smooth.spline(.x$horizon, .x$estimate, df = 5)
+    tibble(
+      horizon  = horizons_fine,
+      estimate = predict(fit, horizons_fine)$y
+    )
+  }) %>%
+  ungroup()
+
+# ── Recovery time from smoothed IRF ──────────────────────────────────────────
+irf_recovery_2stage <- irfs_2stage_smooth %>%
+  group_by(country) %>%
+  arrange(horizon) %>%
+  summarise(
+    first_negative  = if (any(estimate < 0)) min(horizon[estimate < 0])       else NA_real_,
+    first_recovered = if (!is.na(first_negative) &
+                          any(estimate >= 0 & horizon > first_negative))
+                        min(horizon[estimate >= 0 & horizon > first_negative]) else NA_real_,
+    recovery_time   = case_when(
+      is.na(first_negative)  ~ -1,
+      is.na(first_recovered) ~ H + 1,
+      TRUE                   ~ round(first_recovered - first_negative, 1)
+    ),
+    .groups = "drop"
+  )
+
+# ── Map ───────────────────────────────────────────────────────────────────────
+world_joined_2stage <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  left_join(irf_recovery_2stage, by = c("adm0_a3" = "country")) %>%
+  filter(name != "Antarctica")
+
+map_breaks <- c(0, 1, 2, 3, 5, 7, 10, 12)
+map_labels  <- c("0", "1", "2", "3", "5", "7", "10", "10+")
+
+fig_map_2stage <- ggplot(world_joined_2stage) +
+  geom_sf(aes(fill = recovery_time), color = "white", linewidth = 0.1) +
+  scale_fill_stepsn(
+    colours  = rev(RColorBrewer::brewer.pal(9, "Spectral")),
+    breaks   = map_breaks,
+    limits   = c(0, 12),
+    labels   = map_labels,
+    na.value = "grey90",
+    name     = "Years to recovery",
+    guide    = guide_colorsteps(
+      barheight      = unit(3.5, "cm"),
+      barwidth       = unit(0.6, "cm"),
+      show.limits    = TRUE,
+      title.position = "top"
+    )
+  ) +
+  coord_sf(crs = "+proj=robin") +
+  theme_void(base_size = 14) +
+  theme(
+    legend.position  = "right",
+    legend.direction = "vertical",
+    legend.title     = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 11)
+  )
+
+ggsave("figures/map_recovery_2stage.png",
+       fig_map_2stage, width = 8, height = 5, dpi = 300)
+
+# ── Raw vs smooth comparison for selected countries ───────────────────────────
+selected_countries <- c("USA", "PHL", "MEX", "DOM", "JPN", "AUS",
+                         "IND", "CHN", "BRA", "MDG")
+
+selected_countries <- intersect(selected_countries, irfs_2stage$country)
+
+recovery_annot <- irf_recovery_2stage %>%
+  filter(country %in% selected_countries) %>%
+  mutate(
+    label = case_when(
+      recovery_time == -1    ~ "no drop",
+      recovery_time == H + 1 ~ paste0(">", H, "y"),
+      TRUE                   ~ paste0(recovery_time, "y")
+    )
+  )
+
+fig_country_2stage <- ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.5, color = "grey40") +
+  geom_ribbon(
+    data = irfs_2stage %>% filter(country %in% selected_countries),
+    aes(x = horizon, ymin = lo, ymax = hi),
+    fill = "grey70", alpha = 0.3
+  ) +
+  geom_line(
+    data = irfs_2stage %>% filter(country %in% selected_countries),
+    aes(x = horizon, y = estimate),
+    color = "grey55", linewidth = 0.7
+  ) +
+  geom_point(
+    data = irfs_2stage %>% filter(country %in% selected_countries),
+    aes(x = horizon, y = estimate),
+    color = "grey45", size = 1.4, shape = 16
+  ) +
+  geom_line(
+    data = irfs_2stage_smooth %>% filter(country %in% selected_countries),
+    aes(x = horizon, y = estimate),
+    color = "steelblue", linewidth = 1.2
+  ) +
+  geom_text(
+    data = recovery_annot,
+    aes(label = paste0("T* = ", label)),
+    x = H - 0.3, y = Inf,
+    hjust = 1, vjust = 1.6,
+    size = 3, fontface = "bold", color = "steelblue"
+  ) +
+  facet_wrap(~country, ncol = 5, scales = "free_y") +
+  scale_x_continuous(breaks = seq(0, H, 2)) +
+  scale_y_continuous(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(
+    title    = "Two-stage LP: raw vs smoothed country IRFs",
+    subtitle = "Grey = raw OLS + 95% CI; blue = smooth spline (df=5); T* = years to recovery",
+    x        = "Horizon (years)",
+    y        = "GDP response (residualized)"
+  ) +
+  irf_theme +
+  theme(strip.text = element_text(face = "bold", size = 10))
+
+ggsave("figures/irf_country_2stage_smooth.png",
+       fig_country_2stage, width = 14, height = 6, dpi = 300)
+
+fig_map_2stage
+fig_country_2stage
+```
+
 
 
 
