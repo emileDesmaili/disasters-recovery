@@ -73,8 +73,15 @@
 \end{frame}
 \showframenumber}
 
+% ---------------------------------------------------------------
+% Outline
+% ---------------------------------------------------------------
+\begin{frame}{Outline}
+\tableofcontents
+\end{frame}
+
 % ===============================================================
-\section{Motivation and Data}
+\section{Data and Measurement}
 % ===============================================================
 
 {\hideframenumber
@@ -92,16 +99,25 @@ Two competing hypotheses:
   \item \textbf{Compounding damage}: A second shock hits while the economy is still recovering, amplifying the GDP loss (weakened infrastructure, depleted reserves)
   \item \textbf{Diminishing marginal damage}: The first shock already destroyed vulnerable capital, so a second shock has less left to destroy; or governments pre-position response capacity after the first event
 \end{itemize}
-
-\medskip
-\textbf{Definition}: A shock in year $t$ is \emph{compound} if there was also a p95 cyclone shock in $t{-}1$. Otherwise it is \emph{isolated}.
 \end{frame}
 
-\begin{frame}{The Threshold Problem}
-The baseline p95 threshold is computed across \emph{all} country-years (88\% of which have zero wind speed), yielding a threshold of just \textbf{60 knots} --- barely tropical storm strength.
+\begin{frame}{Data Sources}
+\begin{itemize}
+  \item \textbf{GDP}: Penn World Table (PWT 10.01) --- real GDP per capita in constant 2017 USD. 182 countries, 1950--2014 (analysis uses 1970--2014).
 
-\medskip
-This means large cyclone-prone countries are ``treated'' nearly every year:
+  \medskip
+  \item \textbf{Cyclones}: IBTrACS (International Best Track Archive for Climate Stewardship) --- maximum sustained wind speed (knots) for every tropical cyclone, 1970--2015. Matched to countries by geographic proximity.
+
+  \medskip
+  \item \textbf{Treatment variable}: $\mathrm{shock}_{it} = \mathbf{1}[\text{max wind}_{it} \geq 83 \text{ knots}]$ (Category~2+ on the Saffir--Simpson scale). Baseline uses Cat~2+ rather than the p95 threshold (60 knots) to avoid near-continuous treatment in large cyclone-prone countries.
+
+  \medskip
+  \item \textbf{Samples}: (i) 28 ever-treated countries (1,288 obs); (ii) 182 same-continent controls (8,372 obs). 191 Cat~2+ shock-years total.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Why Cat~2+ Instead of p95?}
+The p95 threshold (60 knots) is barely tropical storm strength. At p95, large countries are treated nearly every year:
 
 \centering
 \smallskip
@@ -109,101 +125,53 @@ This means large cyclone-prone countries are ``treated'' nearly every year:
 \hline
 \textbf{Country} & \textbf{p95 (60 kts)} & \textbf{Cat 1+ (64)} & \textbf{Cat 2+ (83)} & \textbf{Cat 3+ (96)} \\
 \hline
-Australia & 41 / 46 yrs & 40 & 25 & 14 \\
-China     & 44 / 46 yrs & 41 & 13 & 7  \\
-Philippines & 42 / 46 yrs & 39 & 30 & 17 \\
-Japan     & 40 / 46 yrs & 37 & 11 & 4  \\
+Australia    & 41 / 45 yrs & 40 & 25 & 14 \\
+China        & 44 / 45 yrs & 41 & 13 & 7  \\
+Philippines  & 42 / 45 yrs & 39 & 30 & 17 \\
+Japan        & 40 / 45 yrs & 37 & 11 & 4  \\
 \hline
 \end{tabular}
 
 \smallskip
 \small
 \begin{itemize}
-  \item At p95, these countries have $\geq 90\%$ compound shocks $\to$ no within-country variation
-  \item Higher thresholds (Cat 2+, Cat 3+) capture only severe events and produce more isolated shocks
+  \item At p95, 61.5\% of shocks are compound $\to$ limited within-country variation in gap
+  \item At Cat 2+, compound share drops to 40\% with 191 shocks --- a better balance of power and variation
+  \item Cat 2+ captures genuinely damaging storms (sustained winds $\geq$ 83 knots / 154 km/h)
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Shock Classification (Baseline p95)}
-\centering
-\begin{tabular}{l r r}
-\hline
-& \textbf{Count} & \textbf{Share} \\
-\hline
-Total shock-years & 423 & 100\% \\
-Compound (strict: shock in $t{-}1$) & 260 & 61.5\% \\
-Isolated (no shock in $t{-}1$) & 163 & 38.5\% \\
-\hline
-Compound (broad: shock in $t{-}1$ or $t{-}2$) & 311 & 73.5\% \\
-Isolated (broad: no shock in $t{-}1$ or $t{-}2$) & 112 & 26.5\% \\
-\hline
-\end{tabular}
-
-\bigskip
-\begin{itemize}
-  \item Among the 40 ever-treated countries, nearly two-thirds of all shock-years are compound
-  \item Compound share is stable across periods: 62.6\% pre-1990, 60.6\% post-1990
-  \item 19 countries have \emph{both} compound and isolated shocks $\to$ within-country variation exists
-\end{itemize}
-\end{frame}
-
-\begin{frame}{Shock Composition Across Thresholds}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.60\textheight,keepaspectratio]{figures/threshold_composition.png}
-
-\smallskip
-\small
-Higher thresholds sharply reduce both total shocks and the compound share: from 61.5\% (p95) to 18\% (Cat 3+). At Cat 2+ (83 knots), there are 191 shocks with a 40\% compound share --- a reasonable balance of power and variation.
-\end{frame}
-
-\begin{frame}{Shock Timeline: Selected Countries}
+\begin{frame}{Shock Timeline: Selected Countries (Cat~2+)}
 \centering
 \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/shock_timeline.png}
 
 \smallskip
 \small
-Large cyclone-prone countries (CHN, PHL, AUS, JPN, MEX) are hit nearly every year $\to$ almost all compound. Smaller Caribbean countries (BHS, NIC, DOM) have sporadic, isolated shocks.
-\end{frame}
-
-\begin{frame}{Inter-Shock Gap Distribution}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.62\textheight,keepaspectratio]{figures/gap_distribution.png}
-
-\smallskip
-\small
-The modal gap between consecutive shocks within a country is \textbf{1 year}. Most multi-shock countries experience near-continuous exposure, not discrete, well-separated events.
-\end{frame}
-
-\begin{frame}{Identification Challenge}
-Compound and isolated shocks are \textbf{not randomly assigned}:
-
-\centering
-\includegraphics[width=0.72\textwidth,height=0.55\textheight,keepaspectratio]{figures/chars_by_shock_type.png}
-
-\smallskip
-\small
-Compound-heavy countries are larger (log pop 4.5 vs 2.7), slightly richer, and have higher human capital. These are the large, frequently-hit economies (CHN, JPN, USA). Isolated-heavy countries are smaller Caribbean/Central American nations.
+At Cat~2+, even frequently-hit countries (PHL, AUS) now have meaningful gaps between shocks. Smaller countries have sparse, isolated events.
 \end{frame}
 
 \begin{frame}{Identification Strategy}
-We address the selection problem through:
-\begin{enumerate}
-  \item \textbf{Within-country variation}: Country FE + country-specific trends ensure we compare compound vs isolated shocks \emph{within the same country's trajectory}
-  \item \textbf{Multiple FE specifications}: Year FE, region$\times$year FE
-  \item \textbf{Controls}: Lagged GDP growth and lagged shocks absorb autoregressive dynamics
-  \item \textbf{Robustness}: Dropping always-compound countries, alternative definitions, continuous intensity
-\end{enumerate}
+\textbf{Two approaches}, both using the continuous gap measure:
 
 \medskip
-\textbf{LP specification}:
+\textbf{1.\ Standard LP} (horizon-by-horizon):
 \[
-  y_{i,t+h} - y_{i,t-1} = \beta_{\text{iso}} \cdot \mathit{Isolated}_{it} + \beta_{\text{comp}} \cdot \mathit{Compound}_{it} + \gamma'X_{it} + \alpha_{i}(t) + \delta_t + \varepsilon_{it}
+  y_{i,t+h} - y_{i,t-1} = \beta_1^h \cdot \mathrm{shock}_{it} + \beta_2^h \cdot \mathrm{shock}_{it} \times \mathrm{gap}_{it} + \gamma_h' X_{it} + \alpha_i(t) + \delta_t + \varepsilon_{it}
 \]
-where $\alpha_i(t)$ includes country-specific linear and quadratic trends.
+
+\textbf{2.\ Parametric LP} (stacked, smooth): impose $\beta(h) = \theta_0 + \theta_1 h + \theta_2 h^2$ (same for gap interaction). Stack all horizons, estimate jointly.
+
+\medskip
+\begin{itemize}
+  \item Controls: 2 lags of GDP growth and shock indicator (horizon-varying)
+  \item FE: country$\times$horizon trends + year$\times$horizon FE
+  \item Same-continent countries (182) serve as controls for year$\times$horizon effects
+  \item SEs: Driscoll--Kraay (standard LP) / clustered by country (parametric LP)
+\end{itemize}
 \end{frame}
 
 % ===============================================================
-\section{Main Results}
+\section{Main Result}
 % ===============================================================
 
 {\hideframenumber
@@ -212,52 +180,88 @@ where $\alpha_i(t)$ includes country-specific linear and quadratic trends.
 \end{frame}
 \showframenumber}
 
-\begin{frame}{Main Result: Interaction Approach}
-\centering
-\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_compound_main.png}
+\begin{frame}{Estimation: Parametric LP with Continuous Gap}
+Instead of a binary compound/isolated split, we use a \textbf{continuous measure}: $\mathrm{gap}_{it}$ = years since the country's previous Cat~2+ shock.
 
-\smallskip
-\small
-Isolated shocks cause a \textbf{persistent 3.0\% GDP decline} at $h = 5$. Compound shocks cause only a \textbf{1.3\% decline} (insignificant). The difference is not statistically significant ($p > 0.10$), but the point estimates diverge from $h = 2$ onward.
-\end{frame}
+\medskip
+\textbf{Stacked local projection} across horizons $h = 0, \ldots, 10$:
+\[
+  y_{i,t+h} - y_{i,t-1} = \beta(h) \cdot \mathrm{shock}_{it} + \phi(h) \cdot \mathrm{shock}_{it} \times \mathrm{gap}_{it} + \gamma_h'X_{it} + \alpha_{ih}(t) + \delta_{th} + \varepsilon_{ith}
+\]
+where $\beta(h) = \theta_0 + \theta_1 h + \theta_2 h^2$ and $\phi(h) = \phi_0 + \phi_1 h + \phi_2 h^2$ are \textbf{quadratic polynomials in horizon}.
 
-\begin{frame}{Separate Shock Indicators Across FE Specifications}
-\centering
-\includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_compound_separate.png}
-
-\smallskip
-\small
-The pattern is robust to FE specification: isolated shocks are more damaging across all three. Adding never-treated countries as controls (right) or switching to region$\times$year FE (center) does not change the qualitative result.
-\end{frame}
-
-\begin{frame}{Compound $-$ Isolated Difference}
-\centering
-\includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_compound_difference.png}
-
-\smallskip
-\small
-The difference (compound $-$ isolated) is consistently positive but \textbf{never statistically significant} at 95\%. The wide CIs reflect limited identifying variation: only 19 countries have both types, and the country-specific trends absorb much of the signal.
-\end{frame}
-
-\begin{frame}{Results at $h = 5$}
-\centering
-\begin{tabular}{l r r r}
-\hline
-\textbf{Specification} & \textbf{Isolated} & \textbf{Compound} & \textbf{Diff} \\
-\hline
-Treated + Year FE              & $-3.0\%^{**}$  & $-1.3\%$     & $+1.7\%$ \\
-Treated + Region$\times$Year FE & $-2.1\%^{*}$  & $-1.4\%$     & $+0.8\%$ \\
-Full Sample + Region$\times$Year FE & $-1.8\%^{*}$ & $-0.6\%$ & $+1.3\%$ \\
-\hline
-\end{tabular}
-
-\bigskip
+\medskip
 \begin{itemize}
-  \item Isolated shocks consistently larger in magnitude
-  \item Compound shocks are smaller and often insignificant
-  \item The difference is not statistically significant in any specification
-  \item \textbf{Interpretation}: Compound shocks appear \emph{less} damaging than isolated ones --- consistent with diminishing marginal damage, not compounding
+  \item $X_{it}$: two lags of GDP growth and shock indicator, interacted with horizon
+  \item $\alpha_{ih}(t)$: country$\times$horizon FE with country$\times$horizon-specific linear and quadratic trends
+  \item $\delta_{th}$: year$\times$horizon FE. Identified using same-continent controls (182 countries)
+  \item SEs: clustered by country
+  \item 6 parameters for the shock dynamics (vs.\ $2 \times 11 = 22$ in standard LP)
 \end{itemize}
+\end{frame}
+
+\begin{frame}{Main Result: Parametric IRF by Gap}
+\centering
+\includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{figures/irf_gap_parametric.png}
+
+\smallskip
+\small
+Smooth IRFs evaluated at different gap values. Compound shocks (gap = 1, red) cause \textbf{near-zero damage}. Isolated shocks (gap = 15, blue) cause a persistent $\approx 2.5\%$ GDP decline. Both samples --- treated only and same-continent controls --- give nearly identical results. Cat~2+ threshold (83 knots, 191 shocks, 28 treated countries).
+\end{frame}
+
+\begin{frame}{Across Treatment Thresholds}
+\centering
+\includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{figures/irf_gap_thresholds.png}
+
+\smallskip
+\small
+Same parametric specification estimated at four thresholds (same-continent sample). The compound$\to$isolated gradient is present at every threshold. Effects are largest at p95 and Cat~1+ (more shocks, more power) and attenuate at Cat~3+ (102 shocks, wide CIs).
+\end{frame}
+
+\begin{frame}{Country-Specific Parametric IRFs (Cat~2+)}
+\centering
+\includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_country_parametric.png}
+
+\smallskip
+\small
+Country-specific quadratic IRFs from a single pooled regression: $\beta_i(h) = \theta_{0i} + \theta_{1i} h + \theta_{2i} h^2$ via $i(\text{country}, \text{shock} \times h^p)$. Same-continent sample with year$\times$horizon FE and country$\times$horizon trends. Countries with $\geq 5$ Cat~2+ shocks.
+\end{frame}
+
+% ===============================================================
+\section{Supporting Results}
+% ===============================================================
+
+{\hideframenumber
+\begin{frame}
+\sectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{Standard LP with Gap Interaction}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_gap_standard.png}
+
+\smallskip
+\small
+Horizon-by-horizon LP (noisier but unrestricted). Same pattern: compound shocks (gap = 1) near zero; isolated shocks (gap = 15) most damaging. Treated-only and same-continent samples nearly identical. At $h = 5$: gap = 1 $\to$ $-0.7\%$; gap = 10 $\to$ $-1.9\%$.
+\end{frame}
+
+\begin{frame}{Gap Coefficient Across Horizons}
+\centering
+\includegraphics[width=\textwidth,height=0.55\textheight,keepaspectratio]{figures/irf_gap_coefficient.png}
+
+\smallskip
+\small
+The coefficient on $\mathrm{shock} \times \mathrm{gap}$ is \textbf{negative} at nearly all horizons --- longer gaps since the last shock are associated with more damage. The effect builds from $h = 2$ onward. Robust across both samples.
+\end{frame}
+
+\begin{frame}{Quadratic vs Cubic Polynomial}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_gap_degree_compare.png}
+
+\smallskip
+\small
+Quadratic and cubic polynomials give nearly identical smooth IRFs (same-continent sample). The results are not sensitive to the polynomial degree.
 \end{frame}
 
 % ===============================================================
@@ -270,98 +274,32 @@ Full Sample + Region$\times$Year FE & $-1.8\%^{*}$ & $-0.6\%$ & $+1.3\%$ \\
 \end{frame}
 \showframenumber}
 
-\begin{frame}{Broader Compound Definition: Shock in $t{-}1$ or $t{-}2$}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_broad_compound.png}
-
-\smallskip
+\begin{frame}{Robustness Checks (Binary Analysis, p95 Threshold)}
 \small
-Extending the lookback window to 2 years: the pattern is similar. Isolated shocks (no shock in $t{-}1$ or $t{-}2$) are more damaging, but the gap narrows because some previously-isolated shocks are reclassified as compound.
+The binary compound/isolated analysis (detailed in appendix) yields consistent findings:
+\begin{itemize}
+  \item \textbf{Binary split at p95}: Isolated shocks $-3.0\%$ at $h = 5$, compound $-1.3\%$. Difference positive but never significant.
+  \item \textbf{Broader definition} (shock in $t{-}1$ or $t{-}2$): pattern persists
+  \item \textbf{Cumulative exposure} (0, 1, 2+ shocks in past 3 years): non-monotonic --- 2+ recent shocks cause \emph{less} damage
+  \item \textbf{Drop always-compound countries} (CHN, PHL, AUS): pattern unchanged
+  \item \textbf{Continuous intensity} $\times$ recent shock: gap disappears when controlling for wind speed continuously --- suggests intensity selection drives part of binary result
+  \item \textbf{No country trends}: pattern reverses, confirming trends are essential
+\end{itemize}
+
+\medskip
+The smooth gap approach sidesteps the binary threshold choice and recovers the same gradient continuously.
 \end{frame}
 
-\begin{frame}{Cumulative Exposure: 0, 1, or 2+ Shocks in Past 3 Years}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_cumulative_exposure.png}
-
-\smallskip
-\small
-The dose-response is \textbf{non-monotonic}: 0 and 1 recent shocks produce similar damage ($-2.7\%$ and $-3.1\%$), while 2+ recent shocks produce \emph{less} damage ($-1.4\%$). This is consistent with diminishing marginal effects at high exposure.
-\end{frame}
-
-\begin{frame}{Dropping Always-Compound Countries}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_drop_always_compound.png}
-
-\smallskip
-\small
-Dropping the 3 countries with $\geq 90\%$ compound shocks and $\geq 10$ total shocks (CHN, PHL, AUS): the pattern persists. Isolated shocks: $-2.9\%$; compound: $-1.9\%$. This addresses the concern that the result is driven by these large, frequently-hit economies.
-\end{frame}
-
-\begin{frame}{Continuous Wind Speed $\times$ Recent Shock}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_continuous_compound.png}
-
-\smallskip
-\small
-Using continuous wind speed (per 1 SD) instead of the binary indicator: the compound/isolated difference \textbf{disappears}. Both are $\approx -0.6\%$ to $-0.7\%$ per SD. The binary result may partly reflect intensity differences between compound and isolated shocks.
-\end{frame}
-
-\begin{frame}{Compound $\times$ Period Interaction}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.60\textheight,keepaspectratio]{figures/irf_compound_period.png}
-
-\smallskip
-\small
-Four-way split: Isolated post-1990 shocks are most damaging ($-3.4\%$). Compound shocks are attenuated in both periods. The compound/isolated gap does not widen post-1990 --- the period divergence in the main analysis operates through a different channel.
-\end{frame}
-
-\begin{frame}{Country + Year FE Only (No Trends)}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_no_trends.png}
-
-\smallskip
-\small
-Without country-specific polynomial trends (more power, but potentially biased): the isolated effect vanishes and compound flips sign. Country trends are essential --- without them, the LP conflates the shock effect with differential growth paths of frequently vs.\ infrequently hit countries.
-\end{frame}
-
-% ===============================================================
-\section{Varying the Treatment Threshold}
-% ===============================================================
-
-{\hideframenumber
-\begin{frame}
-\sectionpage
-\end{frame}
-\showframenumber}
-
-\begin{frame}{IRFs Across Thresholds}
-\centering
-\includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{figures/irf_compound_thresholds.png}
-
-\smallskip
-\small
-As the threshold increases: (1) effects weaken and lose significance due to smaller samples; (2) at p99 and Cat 3+ ($\sim$100 shocks), both compound and isolated effects are near zero or positive. The compound/isolated gap is most visible at p95 and Cat 1+, where sample sizes are largest.
-\end{frame}
-
-\begin{frame}{Compound$-$Isolated Gap Across Thresholds}
-\centering
-\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/threshold_gap.png}
-
-\smallskip
-\small
-The gap (compound $-$ isolated) at $h = 5$ is \textbf{positive} at every threshold --- compound shocks are consistently less damaging. But the gap is \textbf{never significant} and is largest at the lowest threshold where compound-heavy countries dominate.
-\end{frame}
-
-\begin{frame}{Threshold Summary}
+\begin{frame}{Sensitivity to Treatment Threshold}
 \centering
 \begin{tabular}{l r r r r r}
 \hline
 \textbf{Threshold} & \textbf{Shocks} & \textbf{Treated} & \textbf{\%Comp} & \textbf{Isol.\ $h{=}5$} & \textbf{Comp.\ $h{=}5$} \\
 \hline
-p95 (60 kts)   & 423 & 40 & 61.5\% & $-3.0\%$ & $-1.3\%$ \\
-p97.5 (72 kts) & 235 & 29 & 47.2\% & $-1.3\%$ & $-0.5\%$ \\
+p95 (60 kts)    & 423 & 40 & 61.5\% & $-3.0\%$ & $-1.3\%$ \\
 Cat 1+ (64 kts) & 374 & 36 & 58.0\% & $-2.9\%$ & $-1.9\%$ \\
-Cat 2+ (83 kts) & 191 & 28 & 40.3\% & $-1.7\%$ & $-0.8\%$ \\
+p97.5 (72 kts)  & 235 & 29 & 47.2\% & $-1.3\%$ & $-0.5\%$ \\
+\textbf{Cat 2+ (83 kts)} & \textbf{191} & \textbf{28} & \textbf{40.3\%} & $-1.7\%$ & $-0.8\%$ \\
 p99 (90 kts)    & 101 & 23 & 17.8\% & $+0.6\%$ & $+1.2\%$ \\
 Cat 3+ (96 kts) & 102 & 23 & 18.6\% & $+0.7\%$ & $+1.7\%$ \\
 \hline
@@ -369,14 +307,14 @@ Cat 3+ (96 kts) & 102 & 23 & 18.6\% & $+0.7\%$ & $+1.7\%$ \\
 
 \bigskip
 \begin{itemize}
-  \item At moderate thresholds (p95--Cat 2+): negative effects, compound less damaging
-  \item At severe thresholds (p99, Cat 3+): effects flip positive --- but with only $\sim$100 shocks, power is very limited and CIs are wide
-  \item The compound/isolated pattern is qualitatively stable but never statistically significant
+  \item Cat 2+ (bold) offers the best balance: enough shocks (191) with moderate compound share (40\%)
+  \item At moderate thresholds: compound consistently less damaging
+  \item At severe thresholds (p99, Cat 3+): effects attenuate due to small samples
 \end{itemize}
 \end{frame}
 
 % ===============================================================
-\section{Interpretation}
+\section{Discussion}
 % ===============================================================
 
 {\hideframenumber
@@ -386,49 +324,167 @@ Cat 3+ (96 kts) & 102 & 23 & 18.6\% & $+0.7\%$ & $+1.7\%$ \\
 \showframenumber}
 
 \begin{frame}{Why Might Compound Shocks Be Less Damaging?}
-Several mechanisms could explain the pattern:
 \begin{enumerate}
-  \item \textbf{Diminishing marginal destruction}: The first shock destroys the most vulnerable capital stock. A second shock has less to destroy --- the remaining infrastructure was either rebuilt to a higher standard or was resilient enough to survive the first shock.
+  \item \textbf{Diminishing marginal destruction}: The first shock destroys the most vulnerable capital. A second shock has less left to destroy.
 
   \medskip
-  \item \textbf{Preparedness and learning}: After a shock, governments and households invest in preparedness (early warning, evacuation plans, building codes). A follow-up shock arrives into a better-prepared environment.
+  \item \textbf{Preparedness and learning}: Post-shock investments in early warning, building codes, and evacuation capacity reduce vulnerability to follow-up shocks.
 
   \medskip
-  \item \textbf{Mechanical baseline effect}: The LP measures $y_{i,t+h} - y_{i,t-1}$. For compound shocks, $y_{i,t-1}$ is already depressed by the prior shock, so the measured decline from the (lower) baseline is mechanically smaller.
+  \item \textbf{Mechanical baseline effect}: For compound shocks, $y_{i,t-1}$ is already depressed, so the measured decline from the lower baseline is mechanically smaller. Country trends partially address this.
 
   \medskip
-  \item \textbf{Selection on intensity}: Countries that are hit every year (e.g., CHN, PHL) may experience weaker individual storms on average, while isolated shocks may be rarer but more extreme events.
+  \item \textbf{Intensity selection}: Frequently-hit countries may experience weaker average storms; isolated shocks tend to be rarer but more extreme. The continuous gap measure partially addresses this by operating within countries.
 \end{enumerate}
 \end{frame}
 
-\begin{frame}{Disentangling the Mechanisms}
-\begin{itemize}
-  \item The \textbf{continuous intensity} robustness check (Slide~12) is key: when we control for wind speed continuously, the compound/isolated gap disappears. This suggests the binary result reflects \textbf{intensity selection}, not a true interaction effect.
+\begin{frame}{Summary}
+\begin{enumerate}
+  \item \textbf{No evidence of compounding damage}: Repeated cyclone shocks do not amplify GDP losses. If anything, compound shocks (short gaps) are \emph{less} damaging.
 
   \medskip
-  \item The \textbf{mechanical baseline} concern is partially addressed by the LP design --- $y_{i,t-1}$ is already below trend for compound shocks, so we are measuring the additional damage from this lower starting point. The country trends absorb the systematic component.
+  \item \textbf{Smooth gradient}: Replacing the binary split with a continuous gap and parametric IRFs yields a clear gradient --- longer gaps since the last shock are associated with larger damage. Robust across samples and polynomial degrees.
 
   \medskip
-  \item The \textbf{diminishing marginal} and \textbf{preparedness} stories are hard to separate without structural modeling, but both predict the observed pattern.
-\end{itemize}
+  \item \textbf{Same-continent controls don't change results}: Adding 150+ never-treated countries from treated continents leaves the estimates virtually unchanged.
+
+  \medskip
+  \item \textbf{Country heterogeneity}: Country-specific parametric IRFs show the largest effects for PHL, JPN, MEX, IND, MOZ.
+
+  \medskip
+  \item \textbf{Cat~2+ is a better baseline}: The p95 threshold (60 knots) produces near-continuous treatment for large countries. Cat~2+ (83 knots, 191 shocks) provides more within-country variation and captures genuinely severe events.
+\end{enumerate}
 \end{frame}
 
-\begin{frame}{Summary and Takeaways}
-\begin{enumerate}
-  \item \textbf{Isolated shocks appear more damaging} than compound shocks ($-3.0\%$ vs $-1.3\%$ at $h = 5$ with p95), but the difference is \textbf{never statistically significant}.
+% ===============================================================
+% APPENDIX
+% ===============================================================
+\appendix
 
-  \medskip
-  \item The pattern is qualitatively \textbf{stable across thresholds} (p95 through Cat 2+), FE specifications, and sample restrictions. At very high thresholds (Cat 3+), effects weaken due to power.
+\begin{frame}
+\centering
+\vfill
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}\\[1.2em]
+{\LARGE\bfseries\color{primary}Appendix}\\[1.2em]
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}
+\vfill
+\end{frame}
 
-  \medskip
-  \item With \textbf{continuous intensity}, the gap disappears --- intensity selection (frequently-hit countries experience weaker storms on average) likely drives much of the binary result.
+\begin{frame}{Binary Results: Compound vs Isolated IRFs (p95)}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/irf_compound_main.png}
 
-  \medskip
-  \item \textbf{The threshold matters}: The baseline p95 (60 knots) is very low, making countries like AUS and CHN ``treated'' nearly every year. Higher thresholds produce more within-country variation but fewer observations. Cat 2+ (83 knots) offers a reasonable trade-off.
+\smallskip
+\small
+Binary analysis at p95 threshold. Isolated shocks: $-3.0\%$ at $h = 5$. Compound: $-1.3\%$. Difference not significant.
+\end{frame}
 
-  \medskip
-  \item \textbf{No evidence of compounding damage}: Repeated shocks do not amplify GDP losses. Statistical power is limited --- only 19 countries have both types at p95 (fewer at higher thresholds).
-\end{enumerate}
+\begin{frame}{Separate Shock Indicators Across FE Specifications (p95)}
+\centering
+\includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_compound_separate.png}
+
+\smallskip
+\small
+Isolated shocks more damaging across all three FE specifications.
+\end{frame}
+
+\begin{frame}{Compound $-$ Isolated Difference (p95)}
+\centering
+\includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_compound_difference.png}
+
+\smallskip
+\small
+Consistently positive but never statistically significant at 95\%.
+\end{frame}
+
+\begin{frame}{Continuous Intensity $\times$ Recent Shock (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.55\textheight,keepaspectratio]{figures/irf_continuous_compound.png}
+
+\smallskip
+\small
+With continuous wind speed, the compound/isolated gap disappears. Suggests intensity selection drives part of the binary result.
+\end{frame}
+
+\begin{frame}{Cumulative Exposure: 0, 1, or 2+ Shocks in Past 3 Years (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_cumulative_exposure.png}
+
+\smallskip
+\small
+Non-monotonic dose-response: 2+ recent shocks produce less damage than 0 or 1.
+\end{frame}
+
+\begin{frame}{Dropping Always-Compound Countries (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_drop_always_compound.png}
+
+\smallskip
+\small
+Pattern persists after dropping CHN, PHL, AUS.
+\end{frame}
+
+\begin{frame}{Compound $\times$ Period Interaction (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.60\textheight,keepaspectratio]{figures/irf_compound_period.png}
+
+\smallskip
+\small
+Compound shocks attenuated in both pre- and post-1990 periods.
+\end{frame}
+
+\begin{frame}{Country + Year FE Only, No Trends (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_no_trends.png}
+
+\smallskip
+\small
+Without country-specific trends, the pattern reverses. Trends are essential.
+\end{frame}
+
+\begin{frame}{Broader Compound Definition: Shock in $t{-}1$ or $t{-}2$ (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.58\textheight,keepaspectratio]{figures/irf_broad_compound.png}
+
+\smallskip
+\small
+Pattern persists with 2-year lookback window.
+\end{frame}
+
+\begin{frame}{IRFs Across Thresholds}
+\centering
+\includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{figures/irf_compound_thresholds.png}
+
+\smallskip
+\small
+Effects weaken as the threshold increases and samples shrink.
+\end{frame}
+
+\begin{frame}{Shock Composition Across Thresholds}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.60\textheight,keepaspectratio]{figures/threshold_composition.png}
+
+\smallskip
+\small
+Compound share drops from 61.5\% (p95) to 18\% (Cat 3+).
+\end{frame}
+
+\begin{frame}{Inter-Shock Gap Distribution}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.62\textheight,keepaspectratio]{figures/gap_distribution.png}
+
+\smallskip
+\small
+Modal gap between consecutive shocks is 1 year at p95. At Cat~2+, the distribution shifts rightward.
+\end{frame}
+
+\begin{frame}{Identification Challenge: Covariate Differences (p95)}
+\centering
+\includegraphics[width=0.72\textwidth,height=0.55\textheight,keepaspectratio]{figures/chars_by_shock_type.png}
+
+\smallskip
+\small
+Compound-heavy countries are larger and richer. Country FE + trends address this.
 \end{frame}
 
 \end{document}
