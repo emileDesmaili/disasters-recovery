@@ -77,27 +77,35 @@ data <- data_full %>%
     period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
   ) %>%
   filter(year >= 1969) %>%
-  mutate(
-    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
-    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
-    maxwind_p99 = quantile(maxwind[year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
-    maxwind_99 = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
-    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
-    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
-    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
-    energy_p95  = quantile(energy[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
-    nlands_p95  = quantile(nlands[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
-    energy_95  = as.integer(energy_p95  > 0 & energy  >= energy_p95),
-    nlands_95  = as.integer(nlands_p95  > 0 & nlands  >= nlands_p95),
-    energy_p99 = quantile(energy[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
-    nlands_p99 = quantile(nlands[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
-    energy_99  = as.integer(energy_p99  > 0 & energy >= energy_p99),
-    nlands_99  = as.integer(nlands_p99  > 0 & nlands  >= nlands_p99),
-    region = countrycode(countrycode, "iso3c", "region"),
-    region = ifelse(is.na(region), "Other", region),
-    continent = countrycode(countrycode, "iso3c", "continent"),
-    continent = ifelse(is.na(continent), "Other", continent)
-  )
+mutate(
+  maxwind_p95 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+  maxwind_95  = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+
+  maxwind_p99 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+  maxwind_99  = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
+
+  cat1_plus = as.integer(maxwind >= 32.7),
+  cat2_plus = as.integer(maxwind >= 49.4),
+  cat3_plus = as.integer(maxwind >= 70.0),
+
+  energy_p95 = quantile(energy[energy > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+  nlands_p95 = quantile(nlands[nlands > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+
+  energy_95 = as.integer(energy_p95 > 0 & energy >= energy_p95),
+  nlands_95 = as.integer(nlands_p95 > 0 & nlands >= nlands_p95),
+
+  energy_p99 = quantile(energy[energy > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+  nlands_p99 = quantile(nlands[nlands > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+
+  energy_99 = as.integer(energy_p99 > 0 & energy >= energy_p99),
+  nlands_99 = as.integer(nlands_p99 > 0 & nlands >= nlands_p99),
+
+  region = countrycode(countrycode, "iso3c", "region"),
+  region = ifelse(is.na(region), "Other", region),
+
+  continent = countrycode(countrycode, "iso3c", "continent"),
+  continent = ifelse(is.na(continent), "Other", continent)
+)
 
 data <- data %>%
   mutate(
@@ -354,6 +362,82 @@ ggsave("figures/wind_descriptives.png",
 wind_descriptives
 ```
 
+
+
+```{r}
+data_plot <- data %>%
+  group_by(countrycode) %>%
+  filter(any(maxwind_95 > 0, na.rm = TRUE)) %>%  # only ever treated
+  ungroup() %>%
+  filter(maxwind_95 > 0) %>%                     # only event years
+  group_by(countrycode) %>%
+  mutate(
+    first_event = min(year),
+    n_events    = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(n_events), first_event) %>%
+  mutate(countrycode = factor(countrycode,
+                              levels = rev(unique(countrycode))))
+
+# -----------------------------
+# 2. RHS labels
+# -----------------------------
+label_df <- data_plot %>%
+  distinct(countrycode, n_events)
+
+max_year <- max(data_plot$year, na.rm = TRUE)
+label_x  <- max_year + 2
+
+# -----------------------------
+# 3. Split countries into top/bottom halves
+# -----------------------------
+country_levels <- levels(data_plot$countrycode)
+n_countries    <- length(country_levels)
+half_point     <- ceiling(n_countries / 2)
+
+top_half       <- country_levels[1:half_point]
+bottom_half    <- country_levels[(half_point + 1):n_countries]
+
+data_plot <- data_plot %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+label_df <- label_df %>%
+  mutate(panel = ifelse(countrycode %in% top_half, "Top", "Bottom"))
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+ggplot(data_plot, aes(x = year, y = countrycode)) +
+  geom_point(size = 2, alpha = 0.8) +
+
+  # Event count column
+  geom_text(
+    data = label_df,
+    aes(x = label_x, y = countrycode,
+        label = n_events),
+    hjust = 0,
+    size = 3.5,
+    color = "firebrick4",
+    fontface = "bold"
+  ) +
+
+  # Facet top/bottom halves
+  facet_wrap(~ panel, ncol = 2, scales = "free_y") +
+
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.20))) +
+
+  labs(x = "Year", y = "Country") +
+
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(5.5, 40, 5.5, 5.5)
+  )
+ggsave("figures/event_timeline.png", dpi = 300)
+```
 
 
 ```{r}

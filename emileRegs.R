@@ -366,6 +366,72 @@ lp_panel <- function(
       irf_up   = beta + 1.96 * se
     )
   }
-  
+
+  bind_rows(irf_list)
+}
+
+# =============================================================================
+# lp_state_dep: State-dependent LP (continuous interaction)
+# =============================================================================
+# Estimates feols(f(outcome,h) - l(outcome,1) ~ main_var + main_var:state_var
+#                                               + controls | FE)
+# and evaluates the marginal effect ME = β_main + β_inter × state_val
+# at specified quantiles (or explicit eval_values) with delta-method SEs.
+#
+# Returns a tidy data frame with columns:
+#   horizon, irf_mean, se, irf_down, irf_up, quantile, state_val
+# =============================================================================
+lp_state_dep <- function(data, outcome, main_var, state_var,
+                         controls = NULL, horizon = 10,
+                         fe = "countrycode + year",
+                         panel_id = c("countrycode", "year"),
+                         vcov_formula = DK ~ year,
+                         eval_quantiles = c(0.10, 0.50, 0.90),
+                         eval_labels = NULL,
+                         eval_values = NULL) {
+  rhs_controls <- if (!is.null(controls)) paste0(" + ", controls) else ""
+
+  if (is.null(eval_values)) {
+    state_vals <- quantile(data[[state_var]], eval_quantiles, na.rm = TRUE)
+  } else {
+    state_vals <- eval_values
+  }
+  if (is.null(eval_labels)) eval_labels <- paste0("p", eval_quantiles * 100)
+
+  irf_list <- list()
+  for (h in 0:horizon) {
+    fml <- as.formula(paste0(
+      "f(", outcome, ", ", h, ") - l(", outcome, ", 1) ~ ",
+      main_var, " + ", main_var, ":", state_var,
+      rhs_controls, " | ", fe
+    ))
+    mod <- tryCatch(
+      feols(fml, data = data, panel.id = panel_id, vcov = vcov_formula),
+      error = function(e) { message("lp_state_dep h=", h, ": ", e$message); NULL }
+    )
+    if (is.null(mod)) next
+
+    b_main  <- coef(mod)[main_var]
+    int_nm  <- grep(paste0(main_var, ":", state_var, "|", state_var, ":", main_var),
+                    names(coef(mod)), value = TRUE)[1]
+    if (is.na(int_nm)) next
+    b_inter <- coef(mod)[int_nm]
+    V       <- vcov(mod)[c(main_var, int_nm), c(main_var, int_nm)]
+
+    for (j in seq_along(state_vals)) {
+      me   <- b_main + b_inter * state_vals[j]
+      grad <- c(1, state_vals[j])
+      se   <- as.numeric(sqrt(t(grad) %*% V %*% grad))
+      irf_list[[length(irf_list) + 1]] <- data.frame(
+        horizon   = h,
+        irf_mean  = me,
+        se        = se,
+        irf_down  = me - 1.96 * se,
+        irf_up    = me + 1.96 * se,
+        quantile  = eval_labels[j],
+        state_val = state_vals[j]
+      )
+    }
+  }
   bind_rows(irf_list)
 }

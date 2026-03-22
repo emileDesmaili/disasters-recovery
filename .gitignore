@@ -16,3 +16,5 @@ processed_data/
 investigation/.DS_Store
 .DS_Store
 CLAUDE.md
+BB25_replication/**
+*.claude

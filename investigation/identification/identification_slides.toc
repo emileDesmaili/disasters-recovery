@@ -1,0 +1,7 @@
+\beamer@sectionintoc {1}{The Baseline Identification}{2}{0}{1}
+\beamer@sectionintoc {2}{The Compound Question and Its Identification Problem}{6}{0}{2}
+\beamer@sectionintoc {3}{Compound LP: Specification and Methods}{13}{0}{3}
+\beamer@sectionintoc {4}{Results: IRFs Across Five Shock Measures}{16}{0}{4}
+\beamer@sectionintoc {5}{Robustness: Probing the $\bar {W}$ Confound}{22}{0}{5}
+\beamer@sectionintoc {6}{Remedies: Towards Valid Identification of $\tau $}{32}{0}{6}
+\beamer@sectionintoc {7}{Takeaways}{35}{0}{7}

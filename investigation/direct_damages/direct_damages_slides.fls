@@ -1,0 +1,6 @@
+PWD D:/git/disasters-recovery/investigation/direct_damages
+INPUT c:/Users/emile/AppData/Roaming/TinyTeX/texmf.cnf
+INPUT c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/web2c/texmf.cnf
+INPUT c:/Users/emile/AppData/Roaming/TinyTeX/texmf-var/web2c/pdftex/pdflatex.fmt
+INPUT direct_damages_slides.tex
+OUTPUT direct_damages_slides.log
