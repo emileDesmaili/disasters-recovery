@@ -25,6 +25,7 @@
 library(tidyverse)
 library(fixest)
 library(patchwork)
+library(latex2exp)
 source("../../emileRegs.R")
 setFixest_notes(FALSE)
 
@@ -64,11 +65,11 @@ pal_clim <- c(
 )
 
 storm_vars <- list(
-  maxwind      = list(label = "Max wind speed (m/s)",         controls = "l(maxwind,      1:2) + l(gdp_diff, 1:2)"),
-  wind_cat1plus = list(label = "Cat 1+ binary (≥33 m/s)",    controls = "l(wind_cat1plus, 1:2) + l(gdp_diff, 1:2)"),
-  wind_cat2plus = list(label = "Cat 2+ binary (≥43 m/s)",    controls = "l(wind_cat2plus, 1:2) + l(gdp_diff, 1:2)"),
-  wind_cat3plus = list(label = "Cat 3+ binary (≥50 m/s)",    controls = "l(wind_cat3plus, 1:2) + l(gdp_diff, 1:2)"),
-  maxwind_sqkm  = list(label = "Max wind × area (m/s·km²)",  controls = "l(maxwind_sqkm,  1:2) + l(gdp_diff, 1:2)")
+  maxwind      = list(label = "Max wind speed (m/s)",                    controls = "l(maxwind,      1:2) + l(gdp_diff, 1:2)"),
+  wind_cat1plus = list(label = "Cat 1+ binary ($\\geq$33 m/s)",          controls = "l(wind_cat1plus, 1:2) + l(gdp_diff, 1:2)"),
+  wind_cat2plus = list(label = "Cat 2+ binary ($\\geq$43 m/s)",          controls = "l(wind_cat2plus, 1:2) + l(gdp_diff, 1:2)"),
+  wind_cat3plus = list(label = "Cat 3+ binary ($\\geq$50 m/s)",          controls = "l(wind_cat3plus, 1:2) + l(gdp_diff, 1:2)"),
+  maxwind_sqkm  = list(label = "Max wind $\\times$ area (m/s $\\cdot$ km$^2$)", controls = "l(maxwind_sqkm,  1:2) + l(gdp_diff, 1:2)")
 )
 
 theme_nature <- function(base_size = 16) {
@@ -154,8 +155,8 @@ plots <- map(names(storm_vars), function(sv) {
   if (nrow(df) == 0) return(NULL)
   plot_irf(
     df,
-    title    = paste0("GDP Response: ", storm_vars[[sv]]$label),
-    subtitle = paste0("ME(wind | W\u0304) evaluated at W\u0304 \u2208 {20, 40} m/s")
+    title    = TeX(paste0("GDP Response: ", storm_vars[[sv]]$label)),
+    subtitle = TeX("ME(wind | $\\bar{W}$) evaluated at $\\bar{W}$ $\\in$ \\{20, 40\\} m/s")
   )
 })
 names(plots) <- names(storm_vars)

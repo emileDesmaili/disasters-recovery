@@ -10,6 +10,7 @@
 library(tidyverse)
 library(fixest)
 library(patchwork)
+library(latex2exp)
 source("../../emileRegs.R")
 setFixest_notes(FALSE)
 setFixest_nthreads(1)

@@ -28,6 +28,7 @@
 library(tidyverse)
 library(fixest)
 library(patchwork)
+library(latex2exp)
 source("../../emileRegs.R")
 setFixest_notes(FALSE)
 setFixest_nthreads(1)
@@ -147,15 +148,15 @@ shock_vars <- list(
     controls = "l(maxwind_resid, 1:2) + l(gdp_diff, 1:2)"
   ),
   wind_cat1plus = list(
-    label    = "Cat\u00a01+ indicator (\u226533\u00a0m/s)",
+    label    = "Cat\u00a01+ indicator ($\\geq$33\u00a0m/s)",
     controls = "l(wind_cat1plus, 1:2) + l(gdp_diff, 1:2)"
   ),
   wind_cat2plus = list(
-    label    = "Cat\u00a02+ indicator (\u226543\u00a0m/s)",
+    label    = "Cat\u00a02+ indicator ($\\geq$43\u00a0m/s)",
     controls = "l(wind_cat2plus, 1:2) + l(gdp_diff, 1:2)"
   ),
   wind_cat3plus = list(
-    label    = "Cat\u00a03+ indicator (\u226550\u00a0m/s)",
+    label    = "Cat\u00a03+ indicator ($\\geq$50\u00a0m/s)",
     controls = "l(wind_cat3plus, 1:2) + l(gdp_diff, 1:2)"
   )
 )
@@ -204,8 +205,8 @@ plots <- map(names(shock_vars), function(sv) {
   if (nrow(df) == 0) return(NULL)
   irf_plot(
     df,
-    title = paste0("GDP\u00d7Time-Since-Last: shock = ", shock_vars[[sv]]$label),
-    sub   = "ME(shock | years since last TC) evaluated at \u03c4 \u2208 {1, 3, 5} yrs"
+    title = TeX(paste0("GDP $\\times$ Time-Since-Last: shock = ", shock_vars[[sv]]$label)),
+    sub   = TeX("ME(shock | years since last TC) evaluated at $\\tau$ $\\in$ \\{1, 3, 5\\} yrs")
   )
 })
 names(plots) <- names(shock_vars)
@@ -223,7 +224,7 @@ valid_plots <- compact(plots)
 if (length(valid_plots) >= 2) {
   p_combined <- wrap_plots(valid_plots, ncol = 1) +
     plot_annotation(
-      title = "GDP Response \u00d7 Time Since Last Cyclone: Five Shock Measures",
+      title = TeX("GDP Response $\\times$ Time Since Last Cyclone: Five Shock Measures"),
       theme = theme(
         plot.title = element_text(face = "bold", size = 16,
                                   colour = "grey10", hjust = 0.5,

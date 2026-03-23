@@ -6,6 +6,7 @@
 library(tidyverse)
 library(fixest)
 library(patchwork)
+library(latex2exp)
 source("../../emileRegs.R")
 setFixest_notes(FALSE)
 
@@ -189,7 +190,7 @@ p_acf <- ggplot(acf_summary, aes(x = lag, y = mean_acf)) +
   scale_y_continuous(limits = c(-1, 1)) +
   labs(
     title    = "Autocorrelation of Annual Strike Indicator",
-    subtitle = "Mean country-level ACF(struck, lag k); ribbon = \u00b11.96 SE across countries",
+    subtitle = TeX("Mean country-level ACF(struck, lag k); ribbon = $\\pm$1.96 SE across countries"),
     x = "Lag (years)", y = "Mean ACF"
   ) +
   theme_nature()
@@ -218,8 +219,8 @@ p_compound_cond <- compound %>%
   pivot_longer(c(p_given_hit, p_given_nohit),
                names_to = "condition", values_to = "prob") %>%
   mutate(condition = recode(condition,
-    p_given_hit   = "P(struck | struck t\u22121)",
-    p_given_nohit = "P(struck | not struck t\u22121)"
+    p_given_hit   = "P(struck | struck t-1)",
+    p_given_nohit = "P(struck | not struck t-1)"
   ))
 
 p_cond <- ggplot(p_compound_cond,
@@ -232,7 +233,7 @@ p_cond <- ggplot(p_compound_cond,
   scale_shape_manual(values  = c(19, 17)) +
   labs(
     title    = "Compound Event Risk by Climatology",
-    subtitle = "Conditional strike probability by \u1e84 decile",
+    subtitle = TeX("Conditional strike probability by $\\bar{W}$ decile"),
     x        = expression(bar(W)[i]~"decile mean (m/s)"),
     y        = "Probability of strike"
   ) +
@@ -396,7 +397,7 @@ p_box <- ggplot(enso_box, aes(x = strike, y = value, fill = strike)) +
                     guide = "none") +
   labs(
     title    = "Climate Anomalies: Strike vs Non-Strike Years",
-    subtitle = "Ever-treated countries only (W\u0304 > 0); Welch t-test p-value annotated",
+    subtitle = TeX("Ever-treated countries only ($\\bar{W}$ > 0); Welch t-test p-value annotated"),
     x = NULL, y = "Anomaly"
   ) +
   theme_nature(base_size = 13)
