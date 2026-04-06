@@ -1414,21 +1414,19 @@ message("Saved compound_p95_gradient_test.png")
 
 cat("\n--- Categorical τ bins: shock × bin interaction LP (all 4 bins shown) ---\n")
 
-bin_labels <- c("1\u20135 yrs", "5\u201310 yrs", "10\u201315 yrs", "15\u201320 yrs")
-pal_bins   <- c("1\u20135 yrs"   = myred,
-                "5\u201310 yrs"  = mygold,
-                "10\u201315 yrs" = mygreen,
-                "15\u201320 yrs" = myblue)
+bin_labels <- c("1\u20135 yrs", "5\u201315 yrs", "\u226515 yrs")
+pal_bins   <- c("1\u20135 yrs"  = myred,
+                "5\u201315 yrs" = mygold,
+                "\u226515 yrs"  = myblue)
 
 d_p95_cat <- d_p95 %>%
   mutate(
     tau_bin = case_when(
-      is.na(tau_pct)                 ~ NA_character_,
-      tau_pct >= 1  & tau_pct <= 5   ~ "1\u20135 yrs",
-      tau_pct >  5  & tau_pct <= 10  ~ "5\u201310 yrs",
-      tau_pct >  10 & tau_pct <= 15  ~ "10\u201315 yrs",
-      tau_pct >  15 & tau_pct <= 20  ~ "15\u201320 yrs",
-      TRUE                           ~ NA_character_
+      is.na(tau_pct)               ~ NA_character_,
+      tau_pct >= 1 & tau_pct <= 5  ~ "1\u20135 yrs",
+      tau_pct >  5 & tau_pct <= 15 ~ "5\u201315 yrs",
+      tau_pct >  15                ~ "\u226515 yrs",
+      TRUE                         ~ NA_character_
     ),
     tau_bin = factor(tau_bin, levels = bin_labels)
   )
@@ -1436,16 +1434,20 @@ d_p95_cat <- d_p95 %>%
 cat("  Events per bin:\n")
 print(table(d_p95_cat$tau_bin[d_p95_cat$shock_pct == 1], useNA = "ifany"))
 
+# Restrict to rows where tau_pct is non-NA — this exactly matches lp_state_dep,
+# which drops NA rows via feols when tau_pct appears in the formula.
+d_p95_cat <- d_p95_cat %>% filter(!is.na(tau_pct))
+cat("  Rows after dropping NA tau_pct:", nrow(d_p95_cat), "\n")
+
 # One LP per horizon: explicit shock_pct × bin dummies — each coefficient is
 # directly the ME for that bin (same logic as lp_state_dep but categorical).
 # Using explicit dummies avoids fixest misinterpreting i() as a varying slope
 # when the FE spec contains countrycode[year] slope terms.
 d_p95_cat <- d_p95_cat %>%
   mutate(
-    s_b1 = shock_pct * (tau_bin == "1\u20135 yrs"   & !is.na(tau_bin)),
-    s_b2 = shock_pct * (tau_bin == "5\u201310 yrs"  & !is.na(tau_bin)),
-    s_b3 = shock_pct * (tau_bin == "10\u201315 yrs" & !is.na(tau_bin)),
-    s_b4 = shock_pct * (tau_bin == "15\u201320 yrs" & !is.na(tau_bin))
+    s_b1 = shock_pct * (tau_bin == "1\u20135 yrs"  & !is.na(tau_bin)),
+    s_b2 = shock_pct * (tau_bin == "5\u201315 yrs" & !is.na(tau_bin)),
+    s_b3 = shock_pct * (tau_bin == "\u226515 yrs"  & !is.na(tau_bin))
   )
 
 irf_bins <- map_dfr(0:HORIZON, function(h) {
@@ -1453,7 +1455,7 @@ irf_bins <- map_dfr(0:HORIZON, function(h) {
     mod <- feols(
       as.formula(paste0(
         "f(loggdp, ", h, ") - l(loggdp, 1) ~ ",
-        "s_b1 + s_b2 + s_b3 + s_b4 + ",
+        "s_b1 + s_b2 + s_b3 + ",
         "l(shock_pct, 1:2) + l(gdp_diff, 1:2) | ", FE
       )),
       data = d_p95_cat, panel.id = PANEL, vcov = DK
@@ -1461,8 +1463,8 @@ irf_bins <- map_dfr(0:HORIZON, function(h) {
     V  <- vcov(mod)
     cf <- coef(mod)
     map_dfr(
-      list(c("s_b1", "1\u20135 yrs"), c("s_b2", "5\u201310 yrs"),
-           c("s_b3", "10\u201315 yrs"), c("s_b4", "15\u201320 yrs")),
+      list(c("s_b1", "1\u20135 yrs"), c("s_b2", "5\u201315 yrs"),
+           c("s_b3", "\u226515 yrs")),
       function(x) {
         nm <- x[1]; bl <- x[2]
         if (!(nm %in% names(cf))) return(NULL)

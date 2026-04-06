@@ -1,0 +1,180 @@
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   3.5.2     ✔ tibble    3.3.0
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+(Permanently remove the following message with fixest_startup_msg(FALSE).)
+This project used fixest 0.12.1, beware of the following changes:
+fixest 0.13.0:
+Beware, several BREAKING CHANGES:
+- By default the VCOV becomes `iid` for all estimations. Now you need to use the
+argument `vcov` explicitly to have clustered standard-errors.
+  To change the default to the way it was, add this to your .Rprofile:
+  `setFixest_vcov(all = "cluster", no_FE = "iid")`
+- Now by default fixed-effect singletons are removed: the coefficients of the
+estimations will not change but the standard-errors may differ (if you had
+singletons in your estimations).
+  Use the argument `fixef.rm = "infinite_coef"`` to get back to the previous
+  results.
+  To change the default to the way it was, add this in your .Rprofile:
+  `setFixest_estimation(fixef.rm = "infinite_coef")`
+- `coefplot` and `iplot`: the argument `object` is removed, now all models need
+to be passed in `...`
+Warning message:
+package 'fixest' was built under R version 4.5.3 
+Warning message:
+package 'patchwork' was built under R version 4.5.3 
+Warning message:
+package 'latex2exp' was built under R version 4.5.2 
+W_bar breaks (m/s): 10 30 
+clim2 distribution:
+
+High  Low <NA> 
+ 540 2790 4860 
+clim3 distribution:
+
+ T1 (0–10 m/s) T2 (10–30 m/s)   T3 (>30 m/s)           <NA> 
+          2340            720            270           4860 
+Correlation(maxwind, maxwind_resid): 0.521 
+Compound event classification:
+
+Compound (≤2 yrs)  Medium (3–5 yrs) Isolated (>5 yrs) 
+              756                86                62 
+Saved compound_rob_descriptive.png
+
+--- τ distribution within clim2 groups ---
+
+τ distribution by clim2 group:
+  clim2    n tau_mean tau_sd tau_p10 tau_p25 tau_p50 tau_p75 tau_p90
+1  High  528      1.1    0.4       1       1       1       1     1.0
+2   Low 1972      7.4    8.3       1       2       4      10    19.9
+  pct_tau_le2 pct_tau_ge5
+1        98.5         0.4
+2        36.8        47.1
+
+τ mean and SD by tercile group:
+           clim3    n W_bar_mn tau_mean tau_sd pct_le2 pct_ge5
+1  T1 (0–10 m/s) 1537      2.5      8.9    8.8    25.2    58.5
+2 T2 (10–30 m/s)  699     17.5      1.6    1.3    85.1     4.6
+3   T3 (>30 m/s)  264     42.9      1.0    0.1   100.0     0.0
+`geom_smooth()` using formula = 'y ~ x'
+Saved compound_rob_tau_diagnostic.png
+
+--- Full sample vs ever-treated ---
+  Running: Full sample | n = 8190 
+  Running: Ever-treated | n = 3330 
+Saved compound_rob_samples.png
+
+--- W̄ minimum-threshold subsamples ---
+τ distribution by subsample:
+   threshold n_ctry n_obs W_bar_mean tau_mean tau_p50 pct_le2 pct_ge5
+1  W̄ ≥ 0 m/s     73  2500       11.0      6.1       3    49.8    37.2
+2 W̄ ≥ 10 m/s     22   963       24.5      1.5       1    89.2     3.3
+3 W̄ ≥ 15 m/s     13   572       32.6      1.1       1    98.4     0.3
+4 W̄ ≥ 20 m/s     12   528       33.7      1.1       1    98.5     0.4
+  Running: W̄ ≥ 0 m/s | n = 8190 
+  Running: W̄ ≥ 10 m/s | n = 990 
+  Running: W̄ ≥ 15 m/s | n = 585 
+  Running: W̄ ≥ 20 m/s | n = 540 
+Saved compound_rob_wbar_thresh.png
+Saved compound_rob_wbar_grad.png
+
+--- Smooth parametric LP by W̄ threshold ---
+  Smooth LP: W̄ ≥ 0 m/s | stacked rows = 68047 
+  Smooth LP: W̄ ≥ 10 m/s | stacked rows = 8734 
+  Smooth LP: W̄ ≥ 15 m/s | stacked rows = 5071 
+  Smooth LP: W̄ ≥ 20 m/s | stacked rows = 4664 
+Saved compound_smooth_wbar_thresh.png
+Saved compound_smooth_gamma.png
+
+--- Leave-one-continent-out: Africa Americas Asia Europe Oceania ---
+  Running: Drop Africa | n = 5940 
+  Running: Drop Americas | n = 6300 
+  Running: Drop Asia | n = 6030 
+  Running: Drop Europe | n = 6435 
+  Running: Drop Oceania | n = 8055 
+Saved compound_rob_loco.png
+
+--- Within clim2 (binary) groups ---
+  Running: Low (W̄ < 20 m/s) | n = 2790 
+  Running: High (W̄ ≥ 20 m/s) | n = 540 
+Saved compound_rob_clim_groups.png
+
+--- Within clim3 (tercile) groups ---
+  Running: T1 (0–10 m/s) | n = 2340 
+  Running: T2 (10–30 m/s) | n = 720 
+  Running: T3 (>30 m/s) | n = 270 
+Saved compound_rob_clim_terciles.png
+
+--- Country-specific percentile shock × compound (p75/p90/p95/p99) ---
+  p75: 312 events, cor(W̄, τ) = -0.419
+  p90: 161 events, cor(W̄, τ) = -0.322
+  p95: 121 events, cor(W̄, τ) = -0.184
+  p99: 88 events, cor(W̄, τ) = 0.013
+
+Gradient at h = 5 across percentiles:
+              pct_label          quantile irf_mean   se irf_down irf_up
+shock_pct...1       p75    2 yrs (recent)    -0.21 0.68    -1.54   1.12
+shock_pct...2       p75 10 yrs (isolated)    -0.22 1.15    -2.47   2.03
+shock_pct...3       p90    2 yrs (recent)     0.03 1.19    -2.31   2.36
+shock_pct...4       p90 10 yrs (isolated)    -0.66 1.15    -2.92   1.59
+shock_pct...5       p95    2 yrs (recent)    -3.41 1.74    -6.82   0.01
+shock_pct...6       p95 10 yrs (isolated)    -2.06 1.41    -4.81   0.70
+shock_pct...7       p99    2 yrs (recent)    -0.34 2.56    -5.37   4.68
+shock_pct...8       p99 10 yrs (isolated)     1.01 1.99    -2.89   4.92
+Saved compound_p90_irf.png
+
+Gradient [ME(τ=10) − ME(τ=3)] at h=5 by percentile:
+  pct_label  grad grad_se grad_lo grad_hi
+1       p75 -0.01    1.33   -2.62    2.60
+2       p90 -0.69    1.66   -3.94    2.56
+3       p95  1.35    2.24   -3.04    5.74
+4       p99  1.36    3.25   -5.01    7.72
+Saved compound_p90_combined.png
+
+--- Smooth LP: country-specific percentile shock (p75/p90/p95/p99) ---
+  Smooth LP: p75 | stacked rows = 18399 
+  Smooth LP: p90 | stacked rows = 15500 
+  Smooth LP: p95 | stacked rows = 14532 
+  Smooth LP: p99 | stacked rows = 13336 
+Saved compound_p90_smooth_irf.png
+
+--- p95 eval-point sensitivity (regular LP + quadratic + cubic) ---
+  Fitting regular LP for all eval points...
+Saved compound_p95_reg_sensitivity.png
+  Fitting quadratic smooth LP | stacked rows = 14532 
+Saved compound_p95_eval_sensitivity.png
+  Fitting cubic smooth LP | stacked rows = 14532 
+Saved compound_p95_cubic_sensitivity.png
+
+--- compound_p95_irf (long=20, short varies, shared y) ---
+Saved compound_p95_irf.png
+Saved compound_p95_irf_smooth.png
+
+--- Gradient significance test at h=5 ---
+beta2 = 0.174 pp/yr  SE = 0.107 
+Gradient test results:
+# A tibble: 4 × 9
+  label        gradient grad_se  lo90  hi90  lo95  hi95 p_val sig  
+  <chr>           <dbl>   <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <chr>
+1 15 vs 20 yrs     0.87    0.53 -0.01  1.75 -0.17  1.92 0.102 n.s. 
+2 10 vs 20 yrs     1.74    1.07 -0.01  3.5  -0.35  3.83 0.102 n.s. 
+3 5 vs 20 yrs      2.61    1.6  -0.02  5.24 -0.52  5.75 0.102 n.s. 
+4 1 vs 20 yrs      3.31    2.03 -0.02  6.64 -0.66  7.28 0.102 n.s. 
+Saved compound_p95_gradient_test.png
+
+--- Categorical τ bins: shock × bin interaction LP (all 4 bins shown) ---
+  Events per bin:
+
+ 1–5 yrs 5–15 yrs  ≥15 yrs     <NA> 
+      18       17       12       74 
+  Rows after dropping NA tau_pct: 1716 
+Saved compound_p95_irf_bins.png
+Saved results_compound_robustness.rds
+
+Done.
