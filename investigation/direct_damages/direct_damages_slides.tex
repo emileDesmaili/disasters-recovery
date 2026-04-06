@@ -441,4 +441,88 @@ excluding them tests whether they distort the heterogeneity estimates.
 \end{enumerate}
 \end{frame}
 
+% =============================================================================
+% SUPPLEMENTAL: Adaptation Heterogeneity
+% =============================================================================
+\appendix
+
+\begin{frame}
+\centering
+\vfill
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}\\[1.2em]
+{\LARGE\bfseries\color{primary}Supplemental: Adaptation}\\[1.2em]
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}
+\vfill
+\end{frame}
+
+\begin{frame}{Measuring Adaptation from Damage Data}
+
+\textbf{Idea:} the within-country slope of log(damage/GDP) on wind speed
+measures how much infrastructure amplifies cyclone intensity into economic losses.
+\[
+  \log(D_{it}/Y_{i,t-1}) = \alpha_i + \beta_i \cdot w_{it} + \varepsilon_{it}
+\]
+
+\medskip
+\begin{tabular}{@{}lp{8.2cm}@{}}
+\toprule
+$\hat\beta_i$ & Interpretation \\
+\midrule
+\textbf{Low / flat} & Damage rises little with wind intensity. \textit{Adapted.} \\[4pt]
+\textbf{High / steep} & Each extra m/s translates to much larger losses. \textit{Not adapted.} \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\textbf{Estimation:} linear mixed-effects model with random slopes by country,
+estimated on all country-years with positive EMDAT damage (349 obs, 45 countries).
+Random slopes are shrunk toward the pooled mean --- prevents small-sample
+countries with 1--2 damage obs from driving extreme slope estimates.
+
+\medskip
+Countries grouped into \textbf{terciles} of $\hat\beta_i$; GDP IRF
+estimated separately for each group.
+\end{frame}
+
+\begin{frame}{Country Wind-Damage Elasticities}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.76\textheight,keepaspectratio]{figures/adapt_rank.png}
+
+\smallskip\small
+Shrunk BLUP slopes from the mixed-effects model.
+Dashed line = pooled slope.
+Countries with few damage observations are pulled toward the pooled average.
+\end{frame}
+
+\begin{frame}{Adapted Countries Recover Faster}
+\centering
+\includegraphics[width=0.80\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_by_adaptation_hl.png}
+
+\smallskip\small
+LP IRF to a Cat\,1+ strike by adaptation tercile
+(high adaptation in blue, low in red; 90\,\% CI, DK SE).
+Countries with a flat damage-wind slope show a smaller and shorter-lived
+GDP dip after a cyclone.
+\end{frame}
+
+\begin{frame}{All Three Terciles}
+\centering
+\includegraphics[width=0.80\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_by_adaptation.png}
+
+\smallskip\small
+Same LP IRF for all three adaptation terciles.
+The gradient from high (blue) to low (red) adaptation is monotone:
+less adapted countries suffer larger and more persistent GDP losses.
+\end{frame}
+
+\begin{frame}{Damage vs Wind by Adaptation Tercile}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.72\textheight,keepaspectratio]{figures/adapt_scatter.png}
+
+\smallskip\small
+Each point = one country-year with positive EMDAT damage.
+Colour = adaptation tercile from the mixed-effects model.
+Black line = pooled within-country slope.
+\end{frame}
+
 \end{document}

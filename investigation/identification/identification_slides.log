@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.2.24)  23 MAR 2026 01:13
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.2.24)  6 APR 2026 16:29
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -798,33 +798,13 @@ LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <8> not available
 LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <6> not available
 (Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 125.
 
-Overfull \vbox (11.43056pt too high) detected at line 125
+Overfull \vbox (3.43056pt too high) detected at line 125
  []
 
 [4
 
 ]
-<figures/irf_compound_maxwind.png, id=68, 578.16pt x 433.62pt>
-File: figures/irf_compound_maxwind.png Graphic file (type png)
-<use figures/irf_compound_maxwind.png>
-Package pdftex.def Info: figures/irf_compound_maxwind.png  used on input line 135.
-(pdftex.def)             Requested size: 218.34448pt x 163.75836pt.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <10> on input line 135.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <7> on input line 135.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <5> on input line 135.
-LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <10> not available
-(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 135.
-LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <7> not available
-(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 135.
-LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <5> not available
-(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 135.
- [5
-
-{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathit.enc} <./figures/irf_compound_maxwind.png>]
-LaTeX Font Info:    Trying to load font information for TS1+lmss on input line 150.
+LaTeX Font Info:    Trying to load font information for TS1+lmss on input line 140.
  (c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/lm/ts1lmss.fd
 File: ts1lmss.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
@@ -832,98 +812,107 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `lmss' (encoding: TS1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
- [6
+ [5
 
-{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-ts1.enc}{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
-<figures/clim_gap_vs_wbar.png, id=84, 650.43pt x 433.62pt>
+{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-ts1.enc}{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathit.enc}{c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
+<figures/clim_gap_vs_wbar.png, id=78, 650.43pt x 433.62pt>
 File: figures/clim_gap_vs_wbar.png Graphic file (type png)
 <use figures/clim_gap_vs_wbar.png>
-Package pdftex.def Info: figures/clim_gap_vs_wbar.png  used on input line 161.
+Package pdftex.def Info: figures/clim_gap_vs_wbar.png  used on input line 151.
 (pdftex.def)             Requested size: 252.86276pt x 168.57518pt.
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <14.4> on input line 161.
+(Font)              <10> on input line 151.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <7> on input line 151.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <5> on input line 151.
+LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <10> not available
+(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 151.
+LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <7> not available
+(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 151.
+LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <5> not available
+(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 151.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <14.4> on input line 151.
 LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <14.4> not available
-(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 161.
- [7
+(Font)              Font shape `OT1/lmss/m/sl' tried instead on input line 151.
+ [6
 
  <./figures/clim_gap_vs_wbar.png>]
-<figures/compound_rob_descriptive.png, id=91, 722.7pt x 722.7pt>
+<figures/compound_rob_descriptive.png, id=84, 722.7pt x 722.7pt>
 File: figures/compound_rob_descriptive.png Graphic file (type png)
 <use figures/compound_rob_descriptive.png>
-Package pdftex.def Info: figures/compound_rob_descriptive.png  used on input line 172.
+Package pdftex.def Info: figures/compound_rob_descriptive.png  used on input line 162.
 (pdftex.def)             Requested size: 163.75836pt x 163.75836pt.
- [8
+ [7
 
- <./figures/compound_rob_descriptive.png>] [9
+ <./figures/compound_rob_descriptive.png>] [8
 
 ]
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <10.95> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 200.
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 190.
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <8> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 200.
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 190.
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <6> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 200.
- [10
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 190.
+ [9
 
 {c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathex.enc}]
-Overfull \hbox (57.76103pt too wide) in paragraph at lines 223--223
- [] 
- []
-
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <10> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 223.
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 213.
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <7> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 223.
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 213.
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <5> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 223.
-[11
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 213.
+ [10
 
 ]
+<figures/irf_compound_maxwind.png, id=107, 578.16pt x 433.62pt>
 File: figures/irf_compound_maxwind.png Graphic file (type png)
 <use figures/irf_compound_maxwind.png>
-Package pdftex.def Info: figures/irf_compound_maxwind.png  used on input line 233.
+Package pdftex.def Info: figures/irf_compound_maxwind.png  used on input line 223.
 (pdftex.def)             Requested size: 218.34448pt x 163.75836pt.
- [12
+ [11
 
-]
-<figures/compound_p95_irf.png, id=118, 867.24pt x 722.7pt>
+ <./figures/irf_compound_maxwind.png>]
+<figures/compound_p95_irf.png, id=113, 867.24pt x 722.7pt>
 File: figures/compound_p95_irf.png Graphic file (type png)
 <use figures/compound_p95_irf.png>
-Package pdftex.def Info: figures/compound_p95_irf.png  used on input line 244.
+Package pdftex.def Info: figures/compound_p95_irf.png  used on input line 234.
 (pdftex.def)             Requested size: 196.51004pt x 163.75836pt.
- [13
+ [12
 
- <./figures/compound_p95_irf.png>] [14
+ <./figures/compound_p95_irf.png>] [13
 
 ]
-<figures/compound_p95_gradient_test.png, id=130, 650.43pt x 361.35pt>
+<figures/compound_p95_gradient_test.png, id=125, 650.43pt x 361.35pt>
 File: figures/compound_p95_gradient_test.png Graphic file (type png)
 <use figures/compound_p95_gradient_test.png>
-Package pdftex.def Info: figures/compound_p95_gradient_test.png  used on input line 266.
-(pdftex.def)             Requested size: 312.11353pt x 173.39641pt.
-
-Overfull \vbox (8.38953pt too high) detected at line 266
- []
-
-[15
+Package pdftex.def Info: figures/compound_p95_gradient_test.png  used on input line 255.
+(pdftex.def)             Requested size: 286.10075pt x 158.94487pt.
+ [14
 
  <./figures/compound_p95_gradient_test.png>]
-<figures/compound_p95_rob_loco.png, id=136, 1011.78pt x 650.43pt>
+<figures/compound_p95_rob_loco.png, id=131, 1011.78pt x 650.43pt>
 File: figures/compound_p95_rob_loco.png Graphic file (type png)
 <use figures/compound_p95_rob_loco.png>
-Package pdftex.def Info: figures/compound_p95_rob_loco.png  used on input line 278.
-(pdftex.def)             Requested size: 269.72603pt x 173.3953pt.
-
-Overfull \vbox (8.38841pt too high) detected at line 278
- []
-
-[16
+Package pdftex.def Info: figures/compound_p95_rob_loco.png  used on input line 266.
+(pdftex.def)             Requested size: 239.74446pt x 154.12143pt.
+ [15
 
  <./figures/compound_p95_rob_loco.png>]
-<figures/compound_p95_irf_smooth.png, id=142, 867.24pt x 722.7pt>
+<figures/compound_p95_irf_bins.png, id=137, 578.16pt x 469.755pt>
+File: figures/compound_p95_irf_bins.png Graphic file (type png)
+<use figures/compound_p95_irf_bins.png>
+Package pdftex.def Info: figures/compound_p95_irf_bins.png  used on input line 276.
+(pdftex.def)             Requested size: 201.54741pt x 163.75726pt.
+ [16
+
+ <./figures/compound_p95_irf_bins.png>]
+<figures/compound_p95_irf_smooth.png, id=143, 867.24pt x 722.7pt>
 File: figures/compound_p95_irf_smooth.png Graphic file (type png)
 <use figures/compound_p95_irf_smooth.png>
-Package pdftex.def Info: figures/compound_p95_irf_smooth.png  used on input line 289.
+Package pdftex.def Info: figures/compound_p95_irf_smooth.png  used on input line 287.
 (pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
  [17
 
@@ -934,89 +923,85 @@ Package pdftex.def Info: figures/compound_p95_irf_smooth.png  used on input line
 ]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\translate ' on input line 330.
+(hyperref)                removing `\translate ' on input line 328.
 
 [20
 
 ]
 LaTeX Font Info:    Font shape `OT1/lmss/bx/it' in size <10.95> not available
-(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 364.
+(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 362.
  [21
 
 ]
-<figures/clim_acf.png, id=171, 578.16pt x 433.62pt>
+<figures/clim_acf.png, id=172, 578.16pt x 433.62pt>
 File: figures/clim_acf.png Graphic file (type png)
 <use figures/clim_acf.png>
-Package pdftex.def Info: figures/clim_acf.png  used on input line 374.
+Package pdftex.def Info: figures/clim_acf.png  used on input line 372.
 (pdftex.def)             Requested size: 231.18932pt x 173.392pt.
  [22
 
  <./figures/clim_acf.png>]
-<figures/irf_enso_controls.png, id=177, 650.43pt x 505.89pt>
+<figures/irf_enso_controls.png, id=178, 650.43pt x 505.89pt>
 File: figures/irf_enso_controls.png Graphic file (type png)
 <use figures/irf_enso_controls.png>
-Package pdftex.def Info: figures/irf_enso_controls.png  used on input line 385.
+Package pdftex.def Info: figures/irf_enso_controls.png  used on input line 383.
 (pdftex.def)             Requested size: 222.93965pt x 173.39749pt.
  [23
 
  <./figures/irf_enso_controls.png>]
-<figures/clim_compound_combined.png, id=183, 1011.78pt x 867.24pt>
+<figures/clim_compound_combined.png, id=184, 1011.78pt x 867.24pt>
 File: figures/clim_compound_combined.png Graphic file (type png)
 <use figures/clim_compound_combined.png>
-Package pdftex.def Info: figures/clim_compound_combined.png  used on input line 397.
-(pdftex.def)             Requested size: 202.29065pt x 173.392pt.
-
-Overfull \vbox (8.38512pt too high) detected at line 397
- []
-
-[24
+Package pdftex.def Info: figures/clim_compound_combined.png  used on input line 393.
+(pdftex.def)             Requested size: 182.62201pt x 156.53316pt.
+ [24
 
  <./figures/clim_compound_combined.png>] [25
 
 ]
-<figures/compound_rob_tau_diagnostic.png, id=195, 867.24pt x 433.62pt>
+<figures/compound_rob_tau_diagnostic.png, id=196, 867.24pt x 433.62pt>
 File: figures/compound_rob_tau_diagnostic.png Graphic file (type png)
 <use figures/compound_rob_tau_diagnostic.png>
-Package pdftex.def Info: figures/compound_rob_tau_diagnostic.png  used on input line 429.
+Package pdftex.def Info: figures/compound_rob_tau_diagnostic.png  used on input line 425.
 (pdftex.def)             Requested size: 327.51675pt x 163.75836pt.
 LaTeX Font Info:    Font shape `OT1/lmss/b/n' in size <14.4> not available
-(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 429.
+(Font)              Font shape `OT1/lmss/bx/n' tried instead on input line 425.
  [26
 
  <./figures/compound_rob_tau_diagnostic.png>]
-<figures/compound_rob_wbar_thresh.png, id=202, 867.24pt x 722.7pt>
+<figures/compound_rob_wbar_thresh.png, id=203, 867.24pt x 722.7pt>
 File: figures/compound_rob_wbar_thresh.png Graphic file (type png)
 <use figures/compound_rob_wbar_thresh.png>
-Package pdftex.def Info: figures/compound_rob_wbar_thresh.png  used on input line 440.
+Package pdftex.def Info: figures/compound_rob_wbar_thresh.png  used on input line 436.
 (pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
  [27
 
  <./figures/compound_rob_wbar_thresh.png>]
-<figures/compound_rob_wbar_grad.png, id=209, 650.43pt x 433.62pt>
+<figures/compound_rob_wbar_grad.png, id=210, 650.43pt x 433.62pt>
 File: figures/compound_rob_wbar_grad.png Graphic file (type png)
 <use figures/compound_rob_wbar_grad.png>
-Package pdftex.def Info: figures/compound_rob_wbar_grad.png  used on input line 450.
+Package pdftex.def Info: figures/compound_rob_wbar_grad.png  used on input line 446.
 (pdftex.def)             Requested size: 260.08798pt x 173.392pt.
  [28
 
  <./figures/compound_rob_wbar_grad.png>]
-<figures/compound_p90_irf.png, id=215, 867.24pt x 722.7pt>
+<figures/compound_p90_irf.png, id=216, 867.24pt x 722.7pt>
 File: figures/compound_p90_irf.png Graphic file (type png)
 <use figures/compound_p90_irf.png>
-Package pdftex.def Info: figures/compound_p90_irf.png  used on input line 462.
+Package pdftex.def Info: figures/compound_p90_irf.png  used on input line 459.
 (pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
  [29
 
  <./figures/compound_p90_irf.png>]
-<figures/compound_p90_smooth_irf.png, id=221, 867.24pt x 722.7pt>
+<figures/compound_p90_smooth_irf.png, id=222, 867.24pt x 722.7pt>
 File: figures/compound_p90_smooth_irf.png Graphic file (type png)
 <use figures/compound_p90_smooth_irf.png>
-Package pdftex.def Info: figures/compound_p90_smooth_irf.png  used on input line 471.
+Package pdftex.def Info: figures/compound_p90_smooth_irf.png  used on input line 469.
 (pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
  [30
 
  <./figures/compound_p90_smooth_irf.png>]
-<figures/compound_p95_reg_sensitivity.png, id=227, 867.24pt x 722.7pt>
+<figures/compound_p95_reg_sensitivity.png, id=228, 867.24pt x 722.7pt>
 File: figures/compound_p95_reg_sensitivity.png Graphic file (type png)
 <use figures/compound_p95_reg_sensitivity.png>
 Package pdftex.def Info: figures/compound_p95_reg_sensitivity.png  used on input line 482.
@@ -1032,34 +1017,34 @@ LaTeX Font Warning: Font shape `OMS/lmss/m/n' undefined
 [31
 
  <./figures/compound_p95_reg_sensitivity.png>]
-<figures/compound_p95_eval_sensitivity.png, id=235, 867.24pt x 722.7pt>
+<figures/compound_p95_eval_sensitivity.png, id=236, 867.24pt x 722.7pt>
 File: figures/compound_p95_eval_sensitivity.png Graphic file (type png)
 <use figures/compound_p95_eval_sensitivity.png>
-Package pdftex.def Info: figures/compound_p95_eval_sensitivity.png  used on input line 491.
+Package pdftex.def Info: figures/compound_p95_eval_sensitivity.png  used on input line 492.
 (pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
  [32
 
  <./figures/compound_p95_eval_sensitivity.png>]
-<figures/compound_p95_cubic_sensitivity.png, id=241, 867.24pt x 722.7pt>
+<figures/compound_p95_cubic_sensitivity.png, id=242, 867.24pt x 722.7pt>
 File: figures/compound_p95_cubic_sensitivity.png Graphic file (type png)
 <use figures/compound_p95_cubic_sensitivity.png>
-Package pdftex.def Info: figures/compound_p95_cubic_sensitivity.png  used on input line 499.
-(pdftex.def)             Requested size: 208.07568pt x 173.3964pt.
+Package pdftex.def Info: figures/compound_p95_cubic_sensitivity.png  used on input line 503.
+(pdftex.def)             Requested size: 184.9444pt x 154.12033pt.
  [33
 
  <./figures/compound_p95_cubic_sensitivity.png>]
 LaTeX Font Info:    Font shape `OT1/lmss/b/it' in size <10> not available
-(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 535.
 LaTeX Font Info:    Font shape `OT1/lmss/bx/it' in size <10> not available
-(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 535.
 LaTeX Font Info:    Font shape `OT1/lmss/b/it' in size <7> not available
-(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 535.
 LaTeX Font Info:    Font shape `OT1/lmss/bx/it' in size <7> not available
-(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 535.
 LaTeX Font Info:    Font shape `OT1/lmss/b/it' in size <5> not available
-(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/it' tried instead on input line 535.
 LaTeX Font Info:    Font shape `OT1/lmss/bx/it' in size <5> not available
-(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 531.
+(Font)              Font shape `OT1/lmss/bx/sl' tried instead on input line 535.
  [34
 
 ] [35
@@ -1067,77 +1052,73 @@ LaTeX Font Info:    Font shape `OT1/lmss/bx/it' in size <5> not available
 ]
 File: figures/irf_compound_maxwind.png Graphic file (type png)
 <use figures/irf_compound_maxwind.png>
-Package pdftex.def Info: figures/irf_compound_maxwind.png  used on input line 562.
+Package pdftex.def Info: figures/irf_compound_maxwind.png  used on input line 566.
 (pdftex.def)             Requested size: 231.18932pt x 173.392pt.
  [36
 
 ]
-<figures/irf_compound_wind_cat2plus.png, id=265, 578.16pt x 433.62pt>
+<figures/irf_compound_wind_cat2plus.png, id=266, 578.16pt x 433.62pt>
 File: figures/irf_compound_wind_cat2plus.png Graphic file (type png)
 <use figures/irf_compound_wind_cat2plus.png>
-Package pdftex.def Info: figures/irf_compound_wind_cat2plus.png  used on input line 571.
+Package pdftex.def Info: figures/irf_compound_wind_cat2plus.png  used on input line 575.
 (pdftex.def)             Requested size: 231.18932pt x 173.392pt.
  [37
 
  <./figures/irf_compound_wind_cat2plus.png>]
-<figures/compound_rob_samples.png, id=272, 794.97pt x 433.62pt>
+<figures/compound_rob_samples.png, id=273, 794.97pt x 433.62pt>
 File: figures/compound_rob_samples.png Graphic file (type png)
 <use figures/compound_rob_samples.png>
-Package pdftex.def Info: figures/compound_rob_samples.png  used on input line 580.
+Package pdftex.def Info: figures/compound_rob_samples.png  used on input line 584.
 (pdftex.def)             Requested size: 317.88533pt x 173.392pt.
  [38
 
  <./figures/compound_rob_samples.png>]
-<figures/compound_rob_loco.png, id=278, 794.97pt x 578.16pt>
+<figures/compound_rob_loco.png, id=279, 794.97pt x 578.16pt>
 File: figures/compound_rob_loco.png Graphic file (type png)
 <use figures/compound_rob_loco.png>
-Package pdftex.def Info: figures/compound_rob_loco.png  used on input line 590.
+Package pdftex.def Info: figures/compound_rob_loco.png  used on input line 594.
 (pdftex.def)             Requested size: 238.40793pt x 173.38757pt.
  [39
 
  <./figures/compound_rob_loco.png>] [40
 
 ]
-<figures/compound_p95_rob_samples.png, id=289, 1011.78pt x 433.62pt>
+<figures/compound_p95_rob_samples.png, id=290, 1011.78pt x 433.62pt>
 File: figures/compound_p95_rob_samples.png Graphic file (type png)
 <use figures/compound_p95_rob_samples.png>
-Package pdftex.def Info: figures/compound_p95_rob_samples.png  used on input line 625.
+Package pdftex.def Info: figures/compound_p95_rob_samples.png  used on input line 629.
 (pdftex.def)             Requested size: 382.41164pt x 163.8907pt.
  [41
 
  <./figures/compound_p95_rob_samples.png>]
-<figures/compound_p95_rob_clim.png, id=295, 1011.78pt x 433.62pt>
+<figures/compound_p95_rob_clim.png, id=296, 1011.78pt x 433.62pt>
 File: figures/compound_p95_rob_clim.png Graphic file (type png)
 <use figures/compound_p95_rob_clim.png>
-Package pdftex.def Info: figures/compound_p95_rob_clim.png  used on input line 635.
+Package pdftex.def Info: figures/compound_p95_rob_clim.png  used on input line 639.
 (pdftex.def)             Requested size: 382.41164pt x 163.8907pt.
  [42
 
  <./figures/compound_p95_rob_clim.png>]
-<figures/compound_p95_rob_jackknife.png, id=301, 1011.78pt x 433.62pt>
+<figures/compound_p95_rob_jackknife.png, id=302, 1011.78pt x 433.62pt>
 File: figures/compound_p95_rob_jackknife.png Graphic file (type png)
 <use figures/compound_p95_rob_jackknife.png>
-Package pdftex.def Info: figures/compound_p95_rob_jackknife.png  used on input line 646.
+Package pdftex.def Info: figures/compound_p95_rob_jackknife.png  used on input line 650.
 (pdftex.def)             Requested size: 382.41164pt x 163.8907pt.
  [43
 
  <./figures/compound_p95_rob_jackknife.png>]
-<figures/compound_p95_rob_placebo.png, id=308, 650.43pt x 397.485pt>
+<figures/compound_p95_rob_placebo.png, id=309, 650.43pt x 397.485pt>
 File: figures/compound_p95_rob_placebo.png Graphic file (type png)
 <use figures/compound_p95_rob_placebo.png>
-Package pdftex.def Info: figures/compound_p95_rob_placebo.png  used on input line 658.
-(pdftex.def)             Requested size: 283.73866pt x 173.39584pt.
-
-Overfull \vbox (8.38896pt too high) detected at line 658
- []
-
-[44
+Package pdftex.def Info: figures/compound_p95_rob_placebo.png  used on input line 661.
+(pdftex.def)             Requested size: 256.14786pt x 156.5348pt.
+ [44
 
  <./figures/compound_p95_rob_placebo.png>]
-<figures/compound_p95_rob_se.png, id=315, 650.43pt x 289.08pt>
+<figures/compound_p95_rob_se.png, id=316, 650.43pt x 289.08pt>
 File: figures/compound_p95_rob_se.png Graphic file (type png)
 <use figures/compound_p95_rob_se.png>
-Package pdftex.def Info: figures/compound_p95_rob_se.png  used on input line 668.
+Package pdftex.def Info: figures/compound_p95_rob_se.png  used on input line 671.
 (pdftex.def)             Requested size: 350.54216pt x 155.79651pt.
  [45
 
@@ -1164,18 +1145,18 @@ Package rerunfilecheck Info: File `identification_slides.out' has not changed.
 (rerunfilecheck)             Checksum: C7F2117173036656177D5A1AA2AD61A0;982.
  ) 
 Here is how much of TeX's memory you used:
- 23719 strings out of 469514
- 459647 string characters out of 5468199
- 854655 words of memory out of 5000000
- 51638 multiletter control sequences out of 15000+600000
- 729175 words of font info for 190 fonts, out of 8000000 for 9000
+ 23726 strings out of 469514
+ 459926 string characters out of 5468199
+ 854656 words of memory out of 5000000
+ 51645 multiletter control sequences out of 15000+600000
+ 729253 words of font info for 190 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  101i,13n,107p,1018b,534s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmex10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmi10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmi12.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmi7.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmib10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss12.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmssbo10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmssbx10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsso10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsso12.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsso8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy7.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on identification_slides.pdf (45 pages, 6863305 bytes).
+Output written on identification_slides.pdf (45 pages, 7034510 bytes).
 PDF statistics:
- 424 PDF objects out of 1000 (max. 8388607)
+ 425 PDF objects out of 1000 (max. 8388607)
  306 compressed objects within 4 object streams
  96 named destinations out of 1000 (max. 500000)
- 63701 words of extra memory for PDF output out of 74296 (max. 10000000)
+ 63706 words of extra memory for PDF output out of 74296 (max. 10000000)
 

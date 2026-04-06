@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.2.24)  21 MAR 2026 16:31
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.2.24)  28 MAR 2026 20:47
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -813,7 +813,7 @@ Overfull \vbox (13.20006pt too high) detected at line 133
 {c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-mathex.enc}] [5
 
 ]
-<figures/map_direct_damage.png, id=77, 794.97pt x 433.62pt>
+<figures/map_direct_damage.png, id=81, 794.97pt x 433.62pt>
 File: figures/map_direct_damage.png Graphic file (type png)
 <use figures/map_direct_damage.png>
 Package pdftex.def Info: figures/map_direct_damage.png  used on input line 148.
@@ -839,7 +839,7 @@ LaTeX Font Info:    Font shape `OT1/lmss/m/it' in size <5> not available
  [6
 
  <./figures/map_direct_damage.png>]
-<figures/damage_vs_wind_scatter.png, id=84, 939.51pt x 469.755pt>
+<figures/damage_vs_wind_scatter.png, id=88, 939.51pt x 469.755pt>
 File: figures/damage_vs_wind_scatter.png Graphic file (type png)
 <use figures/damage_vs_wind_scatter.png>
 Package pdftex.def Info: figures/damage_vs_wind_scatter.png  used on input line 158.
@@ -847,7 +847,7 @@ Package pdftex.def Info: figures/damage_vs_wind_scatter.png  used on input line 
  [7
 
  <./figures/damage_vs_wind_scatter.png>]
-<figures/damage_deaths_vs_maxwind_feols.png, id=91, 542.025pt x 505.89pt>
+<figures/damage_deaths_vs_maxwind_feols.png, id=95, 542.025pt x 505.89pt>
 File: figures/damage_deaths_vs_maxwind_feols.png Graphic file (type png)
 <use figures/damage_deaths_vs_maxwind_feols.png>
 Package pdftex.def Info: figures/damage_deaths_vs_maxwind_feols.png  used on input line 169.
@@ -855,7 +855,7 @@ Package pdftex.def Info: figures/damage_deaths_vs_maxwind_feols.png  used on inp
  [8
 
  <./figures/damage_deaths_vs_maxwind_feols.png>]
-<figures/direct_damage_coef.png, id=97, 794.97pt x 433.62pt>
+<figures/direct_damage_coef.png, id=101, 794.97pt x 433.62pt>
 File: figures/direct_damage_coef.png Graphic file (type png)
 <use figures/direct_damage_coef.png>
 Package pdftex.def Info: figures/direct_damage_coef.png  used on input line 181.
@@ -865,7 +865,7 @@ Package pdftex.def Info: figures/direct_damage_coef.png  used on input line 181.
  <./figures/direct_damage_coef.png>] [10
 
 ]
-<figures/irf_gdp_by_category.png, id=109, 542.025pt x 505.89pt>
+<figures/irf_gdp_by_category.png, id=113, 542.025pt x 505.89pt>
 File: figures/irf_gdp_by_category.png Graphic file (type png)
 <use figures/irf_gdp_by_category.png>
 Package pdftex.def Info: figures/irf_gdp_by_category.png  used on input line 197.
@@ -877,7 +877,7 @@ Package pdftex.def Info: figures/irf_gdp_by_category.png  used on input line 197
 ] [13
 
 ]
-<figures/irf_gdp_state_dep_damage.png, id=127, 542.025pt x 505.89pt>
+<figures/irf_gdp_state_dep_damage.png, id=131, 542.025pt x 505.89pt>
 File: figures/irf_gdp_state_dep_damage.png Graphic file (type png)
 <use figures/irf_gdp_state_dep_damage.png>
 Package pdftex.def Info: figures/irf_gdp_state_dep_damage.png  used on input line 235.
@@ -885,7 +885,7 @@ Package pdftex.def Info: figures/irf_gdp_state_dep_damage.png  used on input lin
  [14
 
  <./figures/irf_gdp_state_dep_damage.png>]
-<figures/irf_gdp_by_damage_vuln.png, id=133, 542.025pt x 505.89pt>
+<figures/irf_gdp_by_damage_vuln.png, id=137, 542.025pt x 505.89pt>
 File: figures/irf_gdp_by_damage_vuln.png Graphic file (type png)
 <use figures/irf_gdp_by_damage_vuln.png>
 Package pdftex.def Info: figures/irf_gdp_by_damage_vuln.png  used on input line 248.
@@ -905,7 +905,7 @@ File: ot1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 ) [17
 
 {c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/enc/dvips/lm/lm-rmtt.enc}]
-<figures/reconcile_damage_dist.png, id=151, 614.295pt x 469.755pt>
+<figures/reconcile_damage_dist.png, id=155, 614.295pt x 469.755pt>
 File: figures/reconcile_damage_dist.png Graphic file (type png)
 <use figures/reconcile_damage_dist.png>
 Package pdftex.def Info: figures/reconcile_damage_dist.png  used on input line 291.
@@ -919,7 +919,7 @@ Overfull \vbox (2.70985pt too high) detected at line 291
  <./figures/reconcile_damage_dist.png>] [19
 
 ]
-<figures/reconcile_vuln_map.png, id=163, 794.97pt x 433.62pt>
+<figures/reconcile_vuln_map.png, id=168, 794.97pt x 433.62pt>
 File: figures/reconcile_vuln_map.png Graphic file (type png)
 <use figures/reconcile_vuln_map.png>
 Package pdftex.def Info: figures/reconcile_vuln_map.png  used on input line 326.
@@ -927,7 +927,7 @@ Package pdftex.def Info: figures/reconcile_vuln_map.png  used on input line 326.
  [20
 
  <./figures/reconcile_vuln_map.png>]
-<figures/reconcile_balance.png, id=170, 939.51pt x 722.7pt>
+<figures/reconcile_balance.png, id=174, 939.51pt x 722.7pt>
 File: figures/reconcile_balance.png Graphic file (type png)
 <use figures/reconcile_balance.png>
 Package pdftex.def Info: figures/reconcile_balance.png  used on input line 338.
@@ -939,7 +939,7 @@ Overfull \vbox (17.6462pt too high) detected at line 338
 [21
 
  <./figures/reconcile_balance.png>]
-<figures/reconcile_composition.png, id=176, 939.51pt x 469.755pt>
+<figures/reconcile_composition.png, id=180, 939.51pt x 469.755pt>
 File: figures/reconcile_composition.png Graphic file (type png)
 <use figures/reconcile_composition.png>
 Package pdftex.def Info: figures/reconcile_composition.png  used on input line 348.
@@ -947,7 +947,7 @@ Package pdftex.def Info: figures/reconcile_composition.png  used on input line 3
  [22
 
  <./figures/reconcile_composition.png>]
-<figures/reconcile_overlay.png, id=182, 650.43pt x 505.89pt>
+<figures/reconcile_overlay.png, id=186, 650.43pt x 505.89pt>
 File: figures/reconcile_overlay.png Graphic file (type png)
 <use figures/reconcile_overlay.png>
 Package pdftex.def Info: figures/reconcile_overlay.png  used on input line 360.
@@ -955,7 +955,7 @@ Package pdftex.def Info: figures/reconcile_overlay.png  used on input line 360.
  [23
 
  <./figures/reconcile_overlay.png>]
-<figures/reconcile_stormyears.png, id=188, 542.025pt x 505.89pt>
+<figures/reconcile_stormyears.png, id=192, 542.025pt x 505.89pt>
 File: figures/reconcile_stormyears.png Graphic file (type png)
 <use figures/reconcile_stormyears.png>
 Package pdftex.def Info: figures/reconcile_stormyears.png  used on input line 371.
@@ -967,7 +967,7 @@ Overfull \vbox (3.27094pt too high) detected at line 371
 [24
 
  <./figures/reconcile_stormyears.png>]
-<figures/reconcile_timeinvariant.png, id=194, 542.025pt x 505.89pt>
+<figures/reconcile_timeinvariant.png, id=198, 542.025pt x 505.89pt>
 File: figures/reconcile_timeinvariant.png Graphic file (type png)
 <use figures/reconcile_timeinvariant.png>
 Package pdftex.def Info: figures/reconcile_timeinvariant.png  used on input line 383.
@@ -979,7 +979,7 @@ Overfull \vbox (2.71536pt too high) detected at line 383
 [25
 
  <./figures/reconcile_timeinvariant.png>]
-<figures/reconcile_tercile_cuts.png, id=201, 542.025pt x 505.89pt>
+<figures/reconcile_tercile_cuts.png, id=205, 542.025pt x 505.89pt>
 File: figures/reconcile_tercile_cuts.png Graphic file (type png)
 <use figures/reconcile_tercile_cuts.png>
 Package pdftex.def Info: figures/reconcile_tercile_cuts.png  used on input line 394.
@@ -987,7 +987,7 @@ Package pdftex.def Info: figures/reconcile_tercile_cuts.png  used on input line 
  [26
 
  <./figures/reconcile_tercile_cuts.png>]
-<figures/reconcile_ever_treated.png, id=207, 939.51pt x 505.89pt>
+<figures/reconcile_ever_treated.png, id=211, 939.51pt x 505.89pt>
 File: figures/reconcile_ever_treated.png Graphic file (type png)
 <use figures/reconcile_ever_treated.png>
 Package pdftex.def Info: figures/reconcile_ever_treated.png  used on input line 405.
@@ -999,6 +999,47 @@ Package pdftex.def Info: figures/reconcile_ever_treated.png  used on input line 
 ] [29
 
 ]
+
+Package hyperref Warning: Token not allowed in a PDF string (Unicode):
+(hyperref)                removing `\translate ' on input line 448.
+
+[30
+
+] [31
+
+]
+<figures/adapt_rank.png, id=239, 650.43pt x 910.602pt>
+File: figures/adapt_rank.png Graphic file (type png)
+<use figures/adapt_rank.png>
+Package pdftex.def Info: figures/adapt_rank.png  used on input line 495.
+(pdftex.def)             Requested size: 132.27705pt x 185.18788pt.
+ [32
+
+ <./figures/adapt_rank.png>]
+<figures/irf_by_adaptation_hl.png, id=245, 542.025pt x 469.755pt>
+File: figures/irf_by_adaptation_hl.png Graphic file (type png)
+<use figures/irf_by_adaptation_hl.png>
+Package pdftex.def Info: figures/irf_by_adaptation_hl.png  used on input line 506.
+(pdftex.def)             Requested size: 202.43181pt x 175.4409pt.
+ [33
+
+ <./figures/irf_by_adaptation_hl.png>]
+<figures/irf_by_adaptation.png, id=251, 578.16pt x 469.755pt>
+File: figures/irf_by_adaptation.png Graphic file (type png)
+<use figures/irf_by_adaptation.png>
+Package pdftex.def Info: figures/irf_by_adaptation.png  used on input line 516.
+(pdftex.def)             Requested size: 215.92726pt x 175.4409pt.
+ [34
+
+ <./figures/irf_by_adaptation.png>]
+<figures/adapt_scatter.png, id=257, 650.43pt x 469.755pt>
+File: figures/adapt_scatter.png Graphic file (type png)
+<use figures/adapt_scatter.png>
+Package pdftex.def Info: figures/adapt_scatter.png  used on input line 526.
+(pdftex.def)             Requested size: 242.91817pt x 175.4409pt.
+ [35
+
+ <./figures/adapt_scatter.png>]
 \tf@nav=\write6
 \openout6 = `direct_damages_slides.nav'.
 
@@ -1014,21 +1055,21 @@ LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
  ***********
 Package rerunfilecheck Info: File `direct_damages_slides.out' has not changed.
-(rerunfilecheck)             Checksum: 7AFC69F5281923F69A5CB566A55F00BA;954.
+(rerunfilecheck)             Checksum: 301EE68EF1536F4B79D688C61B1B5E98;1035.
  ) 
 Here is how much of TeX's memory you used:
- 23520 strings out of 469514
- 455450 string characters out of 5468199
- 854579 words of memory out of 5000000
- 51523 multiletter control sequences out of 15000+600000
- 704832 words of font info for 153 fonts, out of 8000000 for 9000
+ 23587 strings out of 469514
+ 456764 string characters out of 5468199
+ 854580 words of memory out of 5000000
+ 51571 multiletter control sequences out of 15000+600000
+ 705122 words of font info for 156 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  101i,14n,107p,1018b,534s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmex10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmi10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmmi8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss12.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmss8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmssbx10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsso10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsso8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy7.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy8.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/lm/lmtt10.pfb><c:/Users/emile/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on direct_damages_slides.pdf (29 pages, 3533151 bytes).
+Output written on direct_damages_slides.pdf (35 pages, 4367020 bytes).
 PDF statistics:
- 305 PDF objects out of 1000 (max. 8388607)
- 221 compressed objects within 3 object streams
- 65 named destinations out of 1000 (max. 500000)
- 48299 words of extra memory for PDF output out of 51595 (max. 10000000)
+ 347 PDF objects out of 1000 (max. 8388607)
+ 253 compressed objects within 3 object streams
+ 78 named destinations out of 1000 (max. 500000)
+ 48327 words of extra memory for PDF output out of 51595 (max. 10000000)
 

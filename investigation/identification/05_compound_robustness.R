@@ -1274,18 +1274,9 @@ p_quad_fixed <- ggplot(irf_quad_fixed,
   geom_hline(yintercept = 0, linetype = "dashed",
              colour = "grey60", linewidth = 0.4) +
   geom_line(aes(y = irf_mean), linewidth = 1.6) +
-  geom_text(
-    data = irf_quad_fixed %>%
-      group_by(panel, type) %>% filter(horizon == max(horizon)),
-    aes(x = horizon, y = irf_mean,
-        label = paste0(tau_val, " yrs")),
-    hjust = -0.15, size = 3.2, show.legend = FALSE
-  ) +
   facet_wrap(~ panel, ncol = 2, scales = "fixed") +
-  scale_x_continuous(breaks = seq(0, HORIZON, 2),
-                     expand = expansion(mult = c(0.02, 0.12))) +
-  scale_colour_manual(values = pal_fixed,
-                      labels = c("Recent strike", "Long recovery")) +
+  scale_x_continuous(breaks = seq(0, HORIZON, 2)) +
+  scale_colour_manual(values = pal_fixed) +
   scale_fill_manual(values = pal_fixed, guide = "none") +
   labs(
     title    = "GDP Response After a Major Cyclone: Does Recovery Time Matter? (Smooth LP)",
@@ -1401,6 +1392,115 @@ ggsave("figures/compound_p95_gradient_test.png", p_grad,
        width = 9, height = 5, dpi = 300)
 message("Saved compound_p95_gradient_test.png")
 
+# =============================================================================
+# 7g. Categorical τ bins — shock × bin interaction in a single LP
+# =============================================================================
+# Analogue of lp_state_dep but with a categorical state variable.
+# Formula per horizon:
+#   f(loggdp,h) - l(loggdp,1) ~ shock_pct:i(tau_bin) + controls | FE
+#
+# Using i(tau_bin) without a reference level means fixest omits the
+# standalone shock_pct term and estimates one coefficient per bin directly —
+# each coefficient IS the ME for that bin (no delta method needed, no ref).
+# This mirrors how lp_state_dep recovers ME = β_main + β_inter×c, except
+# the "state" is categorical so each bin gets its own β.
+#
+# Fixed bins (years since last country-specific p95 event):
+#   Bin 1 : 1–5 yrs
+#   Bin 2 : 5–10 yrs
+#   Bin 3 : 10–15 yrs
+#   Bin 4 : 15–20 yrs
+# =============================================================================
+
+cat("\n--- Categorical τ bins: shock × bin interaction LP (all 4 bins shown) ---\n")
+
+bin_labels <- c("1\u20135 yrs", "5\u201310 yrs", "10\u201315 yrs", "15\u201320 yrs")
+pal_bins   <- c("1\u20135 yrs"   = myred,
+                "5\u201310 yrs"  = mygold,
+                "10\u201315 yrs" = mygreen,
+                "15\u201320 yrs" = myblue)
+
+d_p95_cat <- d_p95 %>%
+  mutate(
+    tau_bin = case_when(
+      is.na(tau_pct)                 ~ NA_character_,
+      tau_pct >= 1  & tau_pct <= 5   ~ "1\u20135 yrs",
+      tau_pct >  5  & tau_pct <= 10  ~ "5\u201310 yrs",
+      tau_pct >  10 & tau_pct <= 15  ~ "10\u201315 yrs",
+      tau_pct >  15 & tau_pct <= 20  ~ "15\u201320 yrs",
+      TRUE                           ~ NA_character_
+    ),
+    tau_bin = factor(tau_bin, levels = bin_labels)
+  )
+
+cat("  Events per bin:\n")
+print(table(d_p95_cat$tau_bin[d_p95_cat$shock_pct == 1], useNA = "ifany"))
+
+# One LP per horizon: explicit shock_pct × bin dummies — each coefficient is
+# directly the ME for that bin (same logic as lp_state_dep but categorical).
+# Using explicit dummies avoids fixest misinterpreting i() as a varying slope
+# when the FE spec contains countrycode[year] slope terms.
+d_p95_cat <- d_p95_cat %>%
+  mutate(
+    s_b1 = shock_pct * (tau_bin == "1\u20135 yrs"   & !is.na(tau_bin)),
+    s_b2 = shock_pct * (tau_bin == "5\u201310 yrs"  & !is.na(tau_bin)),
+    s_b3 = shock_pct * (tau_bin == "10\u201315 yrs" & !is.na(tau_bin)),
+    s_b4 = shock_pct * (tau_bin == "15\u201320 yrs" & !is.na(tau_bin))
+  )
+
+irf_bins <- map_dfr(0:HORIZON, function(h) {
+  tryCatch({
+    mod <- feols(
+      as.formula(paste0(
+        "f(loggdp, ", h, ") - l(loggdp, 1) ~ ",
+        "s_b1 + s_b2 + s_b3 + s_b4 + ",
+        "l(shock_pct, 1:2) + l(gdp_diff, 1:2) | ", FE
+      )),
+      data = d_p95_cat, panel.id = PANEL, vcov = DK
+    )
+    V  <- vcov(mod)
+    cf <- coef(mod)
+    map_dfr(
+      list(c("s_b1", "1\u20135 yrs"), c("s_b2", "5\u201310 yrs"),
+           c("s_b3", "10\u201315 yrs"), c("s_b4", "15\u201320 yrs")),
+      function(x) {
+        nm <- x[1]; bl <- x[2]
+        if (!(nm %in% names(cf))) return(NULL)
+        est <- cf[nm]; se <- sqrt(V[nm, nm])
+        tibble(horizon  = h, tau_bin  = bl,
+               irf_mean = est * 100,
+               irf_down = (est - 1.96 * se) * 100,
+               irf_up   = (est + 1.96 * se) * 100)
+      })
+  }, error = function(e) { message("h=", h, ": ", e$message); NULL })
+}) %>%
+  mutate(tau_bin = factor(tau_bin, levels = bin_labels))
+
+p_bins <- ggplot(irf_bins,
+                 aes(x = horizon, colour = tau_bin, fill = tau_bin)) +
+  geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.10, colour = NA) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60", linewidth = 0.4) +
+  geom_line(aes(y = irf_mean), linewidth = 1.6) +
+  scale_x_continuous(breaks = seq(0, HORIZON, 2)) +
+  scale_colour_manual(values = pal_bins, name = NULL) +
+  scale_fill_manual(values   = pal_bins, guide = "none") +
+  labs(
+    title    = "GDP Response by Recovery Gap at Strike Time",
+    subtitle = paste0(
+      "Single LP per horizon: shock_pct \u00d7 \u03c4-bin categorical interaction (95% CI, DK SE).\n",
+      "Each coefficient = ME for that bin. Country-specific p95 threshold."
+    ),
+    x = "Years after strike",
+    y = "Cumulative GDP change (pp)"
+  ) +
+  theme_nature() +
+  guides(colour = guide_legend(nrow = 1,
+                               override.aes = list(linewidth = 2, fill = NA)))
+
+ggsave("figures/compound_p95_irf_bins.png", p_bins,
+       width = 8, height = 6.5, dpi = 300)
+message("Saved compound_p95_irf_bins.png")
+
 # ── Save ---------------------------------------------------------------------
 
 saveRDS(
@@ -1417,7 +1517,8 @@ saveRDS(
        irf_cubic_pairs    = irf_cubic_pairs,
        irf_reg_fixed      = irf_reg_fixed,
        irf_quad_fixed     = irf_quad_fixed,
-       grad_test          = grad_test),
+       grad_test          = grad_test,
+       irf_bins           = irf_bins),
   "results_compound_robustness.rds"
 )
 message("Saved results_compound_robustness.rds")
