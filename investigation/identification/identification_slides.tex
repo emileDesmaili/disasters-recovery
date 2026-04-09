@@ -1,0 +1,686 @@
+\documentclass[aspectratio=169,c]{beamer}
+\usetheme{default}
+\usecolortheme{dove}
+\setbeamertemplate{navigation symbols}{}
+
+% ── Fonts and microtypography ──────────────────────────────────
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ── Color palette ──────────────────────────────────────────────
+\definecolor{primary}{RGB}{23,63,95}
+\definecolor{medgray}{RGB}{140,140,140}
+\definecolor{accent}{RGB}{180,40,40}
+
+\setbeamercolor{title}{fg=primary}
+\setbeamercolor{subtitle}{fg=medgray}
+\setbeamercolor{frametitle}{fg=primary}
+\setbeamercolor{structure}{fg=primary}
+
+% ── Frame titles ────────────────────────────────────────────────
+\setbeamertemplate{frametitle}[default][center]
+
+% ── Title page ──────────────────────────────────────────────────
+\setbeamertemplate{title page}{
+  \vfill
+  \centering
+  {\color{primary!40}\rule{0.45\textwidth}{0.4pt}}\\[1.5em]
+  {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle}\\[0.8em]
+  {\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle}\\[1.5em]
+  {\color{primary!40}\rule{0.45\textwidth}{0.4pt}}
+  \vfill
+}
+
+% ── Footline ────────────────────────────────────────────────────
+\newcommand{\defaultfootline}{%
+  \setbeamertemplate{footline}{%
+    \hfill{\color{medgray}\scriptsize\insertframenumber\kern14pt}\vskip6pt%
+  }%
+}
+\defaultfootline
+
+\newcommand{\hideframenumber}{%
+  \setbeamertemplate{footline}{}%
+  \addtocounter{framenumber}{-1}%
+}
+\newcommand{\showframenumber}{\defaultfootline}
+
+% ── Section pages ──────────────────────────────────────────────
+\setbeamertemplate{section page}{
+  \centering
+  \vfill
+  {\color{primary!40}\rule{0.35\textwidth}{0.4pt}}\\[1.2em]
+  {\LARGE\bfseries\color{primary}\thesection.~\insertsection}\\[1.2em]
+  {\color{primary!40}\rule{0.35\textwidth}{0.4pt}}
+  \vfill
+}
+
+% ── Spacing ────────────────────────────────────────────────────
+\setbeamertemplate{itemize/enumerate body begin}{\setlength\itemsep{6pt}}
+\setbeamertemplate{itemize/enumerate subbody begin}{\setlength\itemsep{4pt}}
+\renewcommand{\arraystretch}{1.25}
+
+% ── Math / booktabs ─────────────────────────────────────────────
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+% ── Metadata ────────────────────────────────────────────────────
+\title{Recovery Time Amplifies Cyclone Damage}
+\subtitle{Evidence from Country-Specific Shock Thresholds --- with an Asia Caveat}
+
+% =================================================================
+\begin{document}
+% =================================================================
+
+{\hideframenumber
+\begin{frame}
+\titlepage
+\end{frame}
+\showframenumber}
+
+% ── Outline ────────────────────────────────────────────────────
+\begin{frame}{Outline}
+\tableofcontents
+\end{frame}
+
+% ===============================================================
+\section{The Problem: Recovery Time Tracks Cyclone Frequency}
+% ===============================================================
+
+{\hideframenumber
+\begin{frame}
+\sectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{The Question}
+
+\textbf{Starting point:} cyclones reduce GDP --- standard local projection confirms this.
+
+\smallskip
+\textbf{Question:} does the damage depend on \emph{how recently} the country was last struck?
+
+\smallskip
+\begin{tabular}{@{}p{4.6cm}p{6.8cm}@{}}
+\toprule
+Story & Prediction \\
+\midrule
+\textbf{Compounding vulnerability} \newline
+{\small fiscal space exhausted, infrastructure weakened}
+  & Bigger GDP hit when struck \emph{again soon} \\[2pt]
+\textbf{Adaptation / asset depletion} \newline
+{\small less capital to destroy, more prepared communities}
+  & Smaller GDP hit when struck again soon \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\textbf{Short answer:} yes --- recently-struck countries suffer larger losses.
+But the effect is concentrated in Asia.
+
+\smallskip
+\textbf{This deck:} (1) address the identification challenge;
+(2) show the main finding; (3) document the geographic concentration.
+\end{frame}
+
+\begin{frame}{Cyclone Exposure Is Orthogonal to Pre-Sample Income}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{figures/eda_wbar_gdp1970.png}
+
+\smallskip\small
+Country-average wind exposure ($\bar{W}$) vs.\ log GDP per capita in 1970.
+Left: ever-struck countries only; right: full sample.
+$r \approx -0.03$ in both panels --- cyclone exposure is not systematically
+correlated with pre-sample income, supporting the identification assumption.
+\end{frame}
+
+\begin{frame}{Why Recovery Time Is Not Randomly Assigned}
+
+\begin{itemize}
+  \item Countries struck more often have shorter gaps \emph{by construction}.
+        A country hit 3×/decade cannot have a 10-year gap.
+  \item $\text{cor}(\bar{W}_i,\, \tau_i) \approx -0.75$:
+        high-frequency countries almost never appear in the ``isolated'' group.
+  \item The raw LP gradient may just reflect \emph{which countries} are isolated
+        --- not whether recovery time causes different damage.
+  \item In the most cyclone-prone countries, 98.5\,\% of observations have
+        $\tau \leq 2$ years $\Rightarrow$ LP must extrapolate to estimate
+        the ``long recovery'' counterfactual.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{EDA: Higher Cyclone Frequency $\Rightarrow$ Shorter Recovery Gaps}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.70\textheight,keepaspectratio]{figures/clim_gap_vs_wbar.png}
+
+\smallskip\small
+Ever-struck countries only.
+$x$-axis: long-run average wind exposure; $y$-axis: average years between strikes.
+LOESS fit $\pm 95$\,\% CI.
+The relationship is mechanical, not behavioural.
+\end{frame}
+
+\begin{frame}{Compound Events Cluster in High-Frequency Countries}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{figures/compound_rob_descriptive.png}
+
+\smallskip\small
+\textbf{Top:} share of back-to-back, medium-gap, and long-gap events by continent.
+\textbf{Bottom:} average wind exposure by event type.
+Back-to-back strikes cluster in the most cyclone-prone countries.
+Any LP gradient comparing these groups partially reflects this selection.
+\end{frame}
+
+% ===============================================================
+\section{Solution: Country-Specific Shock Thresholds}
+% ===============================================================
+
+{\hideframenumber
+\begin{frame}
+\sectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{Fix: Define ``Major'' Relative to Each Country's Own History}
+
+\textbf{Country-specific threshold:} a major cyclone is one above the
+\emph{country's own} historical 95th percentile.
+\[
+  \text{shock}^{95}_{it} = \mathbf{1}\!\left[w_{it} \geq \hat{q}^{95}_i\right],
+  \qquad
+  \tau^{95}_{it} = \text{years since last such event}
+\]
+
+\medskip
+\begin{itemize}
+  \item Even the most cyclone-prone country qualifies $\approx 5$\,\% of years.
+  \item Long recovery gaps exist in \emph{every} country --- no more extrapolation.
+  \item The frequency--gap confound falls from $-0.75$ to $-0.18$.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Country-Specific Thresholds Substantially Reduce the Confound}
+
+\begin{center}
+\begin{tabular}{@{}lrp{4.2cm}@{}}
+\toprule
+Shock definition & cor(freq., gap) & Gap variation \\
+\midrule
+Any strike (absolute) & $-0.75$ & Mostly short in high-freq.\ countries \\
+\midrule
+Country p75 & $-0.42$ & Better \\
+Country p90 & $-0.32$ & Better \\
+Country \textbf{p95} & $\mathbf{-0.18}$ & \textbf{Substantially better} \\
+Country p99 & $+0.01$ & Near-zero confound \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip\small
+At p95 the confound drops from $-0.75$ to $-0.18$.
+Long recovery gaps now exist in \emph{all} countries.
+We proceed with p95 as the baseline.
+\end{frame}
+
+\begin{frame}{Before: Raw LP --- Apparent Gradient, but Confounded}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.68\textheight,keepaspectratio]{figures/irf_compound_maxwind.png}
+
+\smallskip\small
+Absolute wind threshold; recovery gap evaluated at $\tau = 1,\,3,\,5$ years.
+\textbf{Isolated events (blue) look more damaging} --- but high-frequency countries
+dominate the ``recent'' group, so this is partly a selection effect.
+\end{frame}
+
+\begin{frame}{After: Country-Specific p95 --- Genuine Gradient Emerges}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{figures/compound_p95_irf.png}
+
+\smallskip\small
+Country-specific p95 threshold; recovery gap evaluated at short $\tau$ vs.\ 20 years.
+\textbf{Recently-struck countries consistently show larger losses} once the
+frequency confound is removed.
+This is the finding we take forward.
+\end{frame}
+
+% ===============================================================
+\section{Main Finding: Recovery Time Matters}
+% ===============================================================
+
+{\hideframenumber
+\begin{frame}
+\sectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{Gradient Significant at 10\,\%}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.66\textheight,keepaspectratio]{figures/compound_p95_gradient_test.png}
+
+\smallskip\small
+GDP gap at year~5: 20-year recovery group vs each short-recovery group.
+Thick bar = 90\,\% CI; thin bar = 95\,\% CI (Driscoll--Kraay SE).
+\textbf{Significant at the 10\,\% level} ($p = 0.069$); consistent sign across all comparisons.
+The 5 vs.\ 20 year contrast = \textbf{2.6\,pp} larger GDP loss for recently-struck countries.
+\end{frame}
+
+\begin{frame}{But: Result Is Driven by Asia}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.64\textheight,keepaspectratio]{figures/compound_p95_rob_loco.png}
+
+\smallskip\small
+Leave-one-continent-out: each panel drops one continent and re-estimates.
+\textbf{Dropping Asia collapses the gradient} --- red and blue lines converge.
+All other leave-outs preserve the pattern.
+The compounding effect is real on average but concentrated in East and South-East Asia.
+\end{frame}
+
+\begin{frame}{Non-Parametric Check: GDP Response by Recovery Gap Window}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.68\textheight,keepaspectratio]{figures/compound_p95_irf_bins.png}
+
+\smallskip\small
+Single LP per horizon: shock $\times$ bin dummies for 1--5, 5--15, $\geq$15 yrs since last
+country-specific p95 event (same sample as the linear interaction).
+Each coefficient is the ME for that bin --- no functional-form assumption on $\tau$.
+\textbf{1--5 yr group shows persistent losses}; longer-recovery bins near zero.
+95\,\% CI (Driscoll--Kraay SE).
+\end{frame}
+
+\begin{frame}{Smooth LP Confirms the Gradient}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_irf_smooth.png}
+
+\smallskip\small
+Same design estimated with a smooth LP (quadratic trend in horizon),
+which borrows strength across horizons.
+The gap between red (recent) and blue (long recovery) lines is persistent ---
+not a transient artefact. The Asia caveat applies here too.
+\end{frame}
+
+% ===============================================================
+\section{Takeaways}
+% ===============================================================
+
+{\hideframenumber
+\begin{frame}
+\sectionpage
+\end{frame}
+\showframenumber}
+
+\begin{frame}{Summary}
+\small\vspace{-2pt}
+\begin{enumerate}
+  \item \textbf{Raw LP is confounded.} Recovery gap $\tau$ tracks cyclone frequency
+        --- high-frequency countries almost never have long gaps.
+        Country-specific p95 thresholds reduce the confound from $-0.75$ to $-0.18$.
+
+  \item \textbf{A gradient survives.} Recently-struck countries lose \textbf{$\approx$2.6\,pp more
+        GDP} at year~5 than after a 20-year recovery window ($p = 0.069$,
+        consistent across all gap lengths).
+
+  \item \textbf{Driven by Asia.} Dropping Asia collapses the gradient; no
+        other continent does. The compounding effect is concentrated in
+        East/South-East Asia.
+
+  \item \textbf{Open question.} Global average masks heterogeneity.
+        Whether the channel is fiscal space, capital stock, or institutional
+        capacity remains to be tested.
+
+  \item \textbf{Next step.} IV using basin-wide TC activity as a shift-share
+        instrument for recovery gap length.
+\end{enumerate}
+\normalsize
+\end{frame}
+
+% ===============================================================
+% APPENDIX
+% ===============================================================
+\appendix
+
+\begin{frame}
+\centering
+\vfill
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}\\[1.2em]
+{\LARGE\bfseries\color{primary}Appendix}\\[1.2em]
+{\color{primary!40}\rule{0.35\textwidth}{0.4pt}}
+\vfill
+\end{frame}
+
+% ── Appendix: Identification of the wind shock ─────────────────
+
+\begin{frame}{Maxwind Is Approximately Quasi-Random Within Country}
+
+\textbf{Claim:} conditional on a country's long-run cyclone exposure,
+the realised wind speed in any given year is approximately exogenous.
+
+\begin{itemize}
+  \item TC tracks and intensity are governed by sea-surface temperatures,
+        wind shear, and stochastic convective dynamics --- not by GDP.
+  \item Near-zero autocorrelation of the strike indicator at all lags
+        $\Rightarrow$ strikes are approximately i.i.d.\ within country.
+  \item ENSO controls do not attenuate the estimated GDP effect
+        (shown below).
+\end{itemize}
+
+\medskip
+\textbf{What this supports:} a within-country LP estimating the GDP
+response to an unexpected wind shock.
+
+\medskip
+\textbf{What this does \emph{not} support:} identification of how the
+response depends on \emph{when} the country was last struck --- that
+requires the additional argument above.
+\end{frame}
+
+\begin{frame}{ACF of Annual Strike Indicator}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.72\textheight,keepaspectratio]{figures/clim_acf.png}
+
+\smallskip\small
+Mean country-level autocorrelation of the strike indicator, pooled across countries.
+Ribbon $= \pm 1.96$\,SE.
+Near-zero at all lags $\Rightarrow$ strikes are approximately i.i.d.\ within country.
+\end{frame}
+
+\begin{frame}{ENSO and Climate Controls}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_enso_controls.png}
+
+\smallskip\small
+Cat\,1+ baseline LP vs adding Ni\~no-3.4, temperature, and precipitation anomalies
+as contemporaneous controls (each standardised).
+GDP effect is stable across specifications ---
+omitted climate variables do not drive the cyclone--GDP response.
+\end{frame}
+
+\begin{frame}{Back-to-Back Strike Rate by Cyclone Frequency}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.65\textheight,keepaspectratio]{figures/clim_compound_combined.png}
+
+\smallskip\small
+\textbf{Left:} P(struck this year $|$ struck last year) vs P(struck $|$ not struck last year), by wind-exposure decile.
+\textbf{Right:} back-to-back rate by climatology group.
+High-exposure countries have substantially more consecutive strikes --- confirming the mechanical $\bar{W}$--$\tau$ link.
+\end{frame}
+
+% ── Appendix: W̄-subsample approach (failed alternative) ───────
+
+\begin{frame}{Alternative Approach: Restrict to Similar Climatologies}
+
+\textbf{Idea:} compare high-$\tau$ and low-$\tau$ events \emph{within}
+a narrow band of cyclone-prone countries.
+If the gradient is a frequency confound, it should vanish inside a
+homogeneous-frequency subsample.
+
+\medskip
+\textbf{Problem:} within the most cyclone-prone countries,
+98.5\,\% of all observations have $\tau \leq 2$ years.
+There is essentially no ``isolated event'' to compare against ---
+the LP must extrapolate.
+
+\medskip
+\textbf{Result:} the apparent gradient \emph{grows} as we restrict to
+higher-frequency countries, but this is an artefact of extrapolation,
+not a genuine treatment contrast.
+\end{frame}
+
+\begin{frame}{$\tau$ Has Almost No Variation in High-Frequency Countries}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{figures/compound_rob_tau_diagnostic.png}
+
+\smallskip\small
+\textbf{Left:} recovery gap distribution within low- vs.\ high-frequency groups.
+\textbf{Right:} even within groups, higher frequency predicts shorter gaps.
+In the High group ($\bar{W}\geq20$\,m/s), 98.5\,\% of obs have $\tau\leq2$ ---
+no isolated events to estimate.
+\end{frame}
+
+\begin{frame}{$\bar{W}$ Minimum Threshold: IRFs}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_rob_wbar_thresh.png}
+
+\smallskip\small
+Restricting to countries with minimum long-run exposure $\geq 0, 10, 15, 20$\,m/s.
+$\bar{W}\geq0$: gradient near zero.
+$\bar{W}\geq15/20$: apparent gradient, but identified from $<0.4$\,\% isolated obs ---
+artefact of extrapolation.
+\end{frame}
+
+\begin{frame}{How the Gradient Changes with the Frequency Threshold}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_rob_wbar_grad.png}
+
+\smallskip\small
+Gradient at each horizon as the minimum-frequency threshold rises.
+The gradient grows with the threshold not because recovery time
+matters more in high-frequency countries, but because data support collapses.
+\end{frame}
+
+% ── Appendix: Percentile robustness ────────────────────────────
+
+\begin{frame}{All Percentile Thresholds: GDP Response (p75\,/\,p90\,/\,p95\,/\,p99)}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p90_irf.png}
+
+\smallskip\small
+Shock defined at each country's p75, p90, p95, and p99 wind percentile.
+Recovery gap evaluated at 2 vs.\ 10 years --- a narrow window that misses the
+20-year comparison where the gradient emerges.
+The gradient is not identified with these shorter evaluation points.
+\end{frame}
+
+\begin{frame}{All Percentile Thresholds: Smooth LP}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p90_smooth_irf.png}
+
+\smallskip\small
+Smooth LP version (quadratic in horizon) with the same 2 vs.\ 10 year evaluation.
+Consistent with the regular LP: the gradient requires the longer 20-year
+recovery window to materialise cleanly.
+\end{frame}
+
+% ── Appendix: Sensitivity to evaluation points ─────────────────
+
+\begin{frame}{p95: Sensitivity to Comparison Points --- Regular LP}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_reg_sensitivity.png}
+
+\smallskip\small
+Four panels varying the short/long recovery pair: \{2,\,10\}, \{1,\,5\}, \{2,\,15\}, \{5,\,20\} years.
+The gradient concentrates in the \{5,\,20\} panel --- consistent with the main finding
+that a 20-year long window is needed to reveal the contrast.
+Narrower windows compress the difference.
+\end{frame}
+
+\begin{frame}{p95: Sensitivity --- Quadratic Smooth LP}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_eval_sensitivity.png}
+
+\smallskip\small
+Quadratic smooth LP with the same four evaluation pairs.
+Same pattern: the gradient is largest when the long-recovery group is set to 20 years;
+shorter comparisons attenuate it.
+\end{frame}
+
+\begin{frame}{p95: Sensitivity --- Cubic Smooth LP}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.64\textheight,keepaspectratio]{figures/compound_p95_cubic_sensitivity.png}
+
+\smallskip\small
+Cubic polynomial. Pairs: \{15,\,20\}, \{10,\,20\}, \{5,\,20\}, \{1,\,20\} years
+(long recovery fixed at 20 years, short window varies).
+Gradient increases monotonically as the short-recovery group moves closer to the strike ---
+consistent with a genuine compounding mechanism.
+\end{frame}
+
+% ── Appendix: Technical details ────────────────────────────────
+
+\begin{frame}{Technical: The Compound LP Model}
+\small For each horizon $h = 0, \ldots, 10$, estimate by OLS:
+\[
+  \log\text{GDP}_{i,t+h} - \log\text{GDP}_{i,t-1}
+  = \beta_1^{(h)}\, w_{it}
+  + \beta_2^{(h)} (w_{it} \times \tau_{it})
+  + \boldsymbol{\gamma}^{(h)\prime} X_{it}
+  + \alpha_i^{(h)}(t) + \delta_{r(i)t}^{(h)} + \varepsilon_{iht}
+\]
+\textbf{Marginal effect} at $\tau = c$:
+$\widehat{\text{ME}}(c) = \hat\beta_1^{(h)} + \hat\beta_2^{(h)}\cdot c$, delta-method SE.
+
+\medskip
+\begin{tabular}{@{}lp{8.0cm}@{}}
+\toprule
+Symbol & Definition \\
+\midrule
+$w_{it}$ & Shock: $\mathbf{1}[w_{it}\geq\hat{q}^{95}_i]$ (country-specific p95) \\
+$\tau_{it}$ & Years since last country-specific p95 event \\
+$X_{it}$ & Lags 1--2 of shock and GDP growth \\
+$\alpha_i^{(h)}(t)$ & Country quadratic trend \\
+$\delta_{r(i)t}^{(h)}$ & Region $\times$ year fixed effect \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\textbf{SE:} Driscoll--Kraay (arbitrary serial and cross-sectional correlation).
+\normalsize
+\end{frame}
+
+\begin{frame}{Technical: Smooth Parametric LP}
+\small
+Stack all horizons $h=0,\ldots,10$ into a single dataset.
+Parameterise the IRF as a quadratic polynomial in $h$:
+\[
+  \text{ME}(h,\tau=g) = \beta(h) + g\cdot\gamma(h),
+  \quad \beta(h) = b_0 + b_1 h + b_2 h^2, \quad
+        \gamma(h) = c_0 + c_1 h + c_2 h^2
+\]
+6 parameters instead of $2\times11=22$, improving precision.
+
+\medskip
+\textbf{FE:} country $\times$ horizon factor (trend) and year $\times$ horizon factor.
+\textbf{SE:} clustered by country.
+\normalsize
+\end{frame}
+
+% ── Appendix: Baseline compound IRFs ───────────────────────────
+
+\begin{frame}{Raw Compound LP: Maxwind $\times$ Recovery Time}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_compound_maxwind.png}
+
+\smallskip\small
+Shock = raw maxwind (m/s).
+Red = back-to-back ($\tau=1$ yr), gold = medium gap ($\tau=3$ yrs),
+blue = isolated ($\tau=5$ yrs).
+Apparent gradient: isolated events slightly more damaging.
+This is the pattern that country-specific thresholds eliminate.
+\end{frame}
+
+\begin{frame}{Raw Compound LP: Cat\,2+ Binary $\times$ Recovery Time}
+\centering
+\includegraphics[width=0.82\textwidth,height=0.72\textheight,keepaspectratio]{figures/irf_compound_wind_cat2plus.png}
+
+\smallskip\small
+Shock = Cat\,2+ indicator ($\geq43$\,m/s).
+The gradient is sharper for intense events --- but this is the same confound.
+\end{frame}
+
+\begin{frame}{Additional Robustness: Full Sample vs Ever-Treated}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_rob_samples.png}
+
+\smallskip\small
+Left: full panel.  Right: ever-struck countries only.
+Gradient similar in both --- not driven by never-struck controls.
+\end{frame}
+
+\begin{frame}{Raw Compound LP: Leave-One-Continent-Out}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_rob_loco.png}
+
+\smallskip\small
+Leave-one-continent-out on the raw (absolute-threshold) compound LP.
+No single region obviously drives the raw gradient before applying the
+country-specific threshold correction.
+\end{frame}
+
+\begin{frame}{IV Sketch: A Possible Causal Test}
+\small
+\textbf{Instrument:} basin-wide TC count in year $t-1$ (excluding own country)
+$\times$ country's historical exposure share.
+\[
+  Z_{it} = \underbrace{\bar{e}_i}_{\text{fixed share}} \times
+           \underbrace{N^{\text{basin}}_{b(i),t-1}}_{\text{annual shift}}
+\]
+\textbf{Why exclusion is plausible:}
+basin-wide TC activity is driven by hemispheric SSTs and ITCZ dynamics,
+not by any country's economic conditions; the share is predetermined.
+
+\medskip
+\textbf{Remaining concerns:}
+SSTs affect both TC activity and agriculture; the share may proxy for geography.
+
+\medskip
+\textit{The p95 analysis already provides evidence for a genuine compounding effect.
+IV would provide a fully causal test and sharpen the geographic heterogeneity.}
+\normalsize
+\end{frame}
+
+% ── Appendix: Robustness of the main finding ──────────────────
+
+\begin{frame}{Robustness: Result Holds Across Sample Restrictions}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_rob_samples.png}
+
+\smallskip\small
+Three samples: full panel (baseline), ever-struck countries only, countries
+with at least one compound p95 event.
+Red = 5-yr recovery, blue = 20-yr recovery.
+The gradient is consistent across all sample restrictions.
+\end{frame}
+
+\begin{frame}{Robustness: Climatology Subsamples}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_rob_clim.png}
+
+\smallskip\small
+Splitting by long-run cyclone exposure: high ($\bar{W}\geq20$\,m/s)
+and low ($0<\bar{W}<20$\,m/s).
+Country-specific p95 threshold computed on the full sample.
+\end{frame}
+
+\begin{frame}{Robustness: Jackknife (Year and Country)}
+\centering
+\includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/compound_p95_rob_jackknife.png}
+
+\smallskip\small
+\textbf{Left:} leave-one-year-out. \textbf{Right:} leave-one-country-out.
+Each iteration sets the treatment to zero for the omitted unit and re-estimates.
+Shaded bands = 10--90th and 25--75th percentile of jackknife estimates.
+Bold blue line = baseline. The gradient is stable; no single observation drives it.
+\end{frame}
+
+\begin{frame}{Robustness: Placebo Test}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.65\textheight,keepaspectratio]{figures/compound_p95_rob_placebo.png}
+
+\smallskip\small
+Maxwind shuffled within each country; p95 threshold, shock indicator, and $\tau$
+recomputed from scratch each draw (500 permutations). GDP outcomes held fixed.
+Red line = actual gradient at year~5 (2.6\,pp).
+If spurious, permuted gradients would be as large as the actual value.
+\end{frame}
+
+\begin{frame}{Robustness: Standard Error Variants}
+\centering
+\includegraphics[width=0.88\textwidth,height=0.66\textheight,keepaspectratio]{figures/compound_p95_rob_se.png}
+
+\smallskip\small
+Gradient at year~5 under three SE assumptions: Driscoll--Kraay, two-way cluster,
+and country cluster (wild bootstrap fallback).
+Point estimate 2.6\,pp throughout; CIs vary slightly across specifications.
+\end{frame}
+
+\end{document}

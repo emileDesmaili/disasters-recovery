@@ -1,0 +1,67 @@
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   3.5.2     ✔ tibble    3.3.0
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+(Permanently remove the following message with fixest_startup_msg(FALSE).)
+fixest 0.10.0:
+- vcov: new argument 'vcov' that replaces 'se' and 'cluster' in all functions
+(retro compatibility is ensured).
+- Breaking: arg. 'vcov' now comes after 'data'/'family', hence code using an
+offset w/t the arg. name may break (just use 'offset = stuff' now).
+- function 'dof()' has been renamed into 'ssc()' (i.e. small sample correction).
+From fixest 0.9.0 onward: BREAKING changes! 
+- In i():
+    + the first two arguments have been swapped! Now it's i(factor_var,
+    continuous_var) for interactions.
+    + argument 'drop' has been removed (put everything in 'ref' now).
+- In feglm(): 
+    + the default family becomes 'gaussian' to be in line with glm(). Hence, for
+    Poisson estimations, please use fepois() instead.
+=== 1. Country-specific adaptation slopes ===
+  Countries with >=  3  storm observations: 25 
+Adaptation tercile counts:
+# A tibble: 3 × 2
+  adapt_label                         n
+  <fct>                           <int>
+1 "High adaptation\n(flat slope)"     9
+2 "Mid adaptation"                    8
+3 "Low adaptation\n(steep slope)"     8
+Slope range by tercile:
+# A tibble: 3 × 4
+  adapt_label                       min median   max
+  <fct>                           <dbl>  <dbl> <dbl>
+1 "High adaptation\n(flat slope)" -0.35  -0.02  0.03
+2 "Mid adaptation"                 0.04   0.04  0.08
+3 "Low adaptation\n(steep slope)"  0.1    0.13  0.93
+
+=== 2. Slope distribution plot ===
+Saved adapt_slopes_country.png
+Saved adapt_extremes.png
+
+=== 3. Merging adaptation group into full panel ===
+  Panel obs by tercile (all years):
+# A tibble: 4 × 2
+  adapt_label                         n
+  <fct>                           <int>
+1 "High adaptation\n(flat slope)"   405
+2 "Mid adaptation"                  360
+3 "Low adaptation\n(steep slope)"   360
+4  <NA>                            7065
+
+=== 4. LP IRF by adaptation tercile ===
+  Fitting LP for: High adaptation
+(flat slope) 
+  Fitting LP for: Mid adaptation 
+  Fitting LP for: Low adaptation
+(steep slope) 
+Saved irf_by_adaptation.png
+Saved irf_by_adaptation_hl.png
+Saved results_adaptation.rds
+
+Done.

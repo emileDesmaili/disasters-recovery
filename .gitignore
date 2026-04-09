@@ -18,3 +18,5 @@ investigation/.DS_Store
 CLAUDE.md
 investigation/compound/strategy1_results.rds
 texput.log
+BB25_replication/
+*.claude

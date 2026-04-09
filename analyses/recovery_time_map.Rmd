@@ -77,27 +77,35 @@ data <- data_full %>%
     period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
   ) %>%
   filter(year >= 1969) %>%
-  mutate(
-    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
-    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
-    maxwind_p99 = quantile(maxwind[year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
-    maxwind_99 = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
-    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
-    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
-    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
-    energy_p95  = quantile(energy[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
-    nlands_p95  = quantile(nlands[year >= 1970 & year <= 2014],  0.95, na.rm = TRUE),
-    energy_95  = as.integer(energy_p95  > 0 & energy  >= energy_p95),
-    nlands_95  = as.integer(nlands_p95  > 0 & nlands  >= nlands_p95),
-    energy_p99 = quantile(energy[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
-    nlands_p99 = quantile(nlands[year >= 1970 & year <= 2014],  0.99, na.rm = TRUE),
-    energy_99  = as.integer(energy_p99  > 0 & energy >= energy_p99),
-    nlands_99  = as.integer(nlands_p99  > 0 & nlands  >= nlands_p99),
-    region = countrycode(countrycode, "iso3c", "region"),
-    region = ifelse(is.na(region), "Other", region),
-    continent = countrycode(countrycode, "iso3c", "continent"),
-    continent = ifelse(is.na(continent), "Other", continent)
-  )
+mutate(
+  maxwind_p95 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+  maxwind_95  = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+
+  maxwind_p99 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+  maxwind_99  = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
+
+  cat1_plus = as.integer(maxwind >= 32.7),
+  cat2_plus = as.integer(maxwind >= 49.4),
+  cat3_plus = as.integer(maxwind >= 70.0),
+
+  energy_p95 = quantile(energy[energy > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+  nlands_p95 = quantile(nlands[nlands > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+
+  energy_95 = as.integer(energy_p95 > 0 & energy >= energy_p95),
+  nlands_95 = as.integer(nlands_p95 > 0 & nlands >= nlands_p95),
+
+  energy_p99 = quantile(energy[energy > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+  nlands_p99 = quantile(nlands[nlands > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+
+  energy_99 = as.integer(energy_p99 > 0 & energy >= energy_p99),
+  nlands_99 = as.integer(nlands_p99 > 0 & nlands >= nlands_p99),
+
+  region = countrycode(countrycode, "iso3c", "region"),
+  region = ifelse(is.na(region), "Other", region),
+
+  continent = countrycode(countrycode, "iso3c", "continent"),
+  continent = ifelse(is.na(continent), "Other", continent)
+)
 
 data <- data %>%
   mutate(
@@ -137,7 +145,7 @@ irf_list <- vector("list", H + 1)
 
 for (h in 0:H) {
   fe_model <- feols(
-    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, maxwind_95) + l(gdp_diff,1:2) +l(maxwind_95,1:2) | countrycode[year] + countrycode[year2] + year^region,
+    f(loggdp, h) - l(loggdp, 1) ~ i(countrycode, cat1_plus) + l(gdp_diff,1:2) +l(cat1_plus,1:2) | countrycode[year] + countrycode[year2] + year^region,
     data = d_treated,
     panel.id = panel_id,
     vcov = vcov_fm
@@ -233,7 +241,7 @@ irf_list <- vector("list", H + 1)
 for (h in 0:H) {
   fe_model <- feols(
     f(loggdp, h) - l(loggdp, 1) ~
-      i(countrycode, maxwind_95) + l(gdp_diff, 1:2) + l(maxwind_95, 1:2) |
+      i(countrycode, cat1_plus) + l(gdp_diff, 1:2) + l(cat1_plus, 1:2) |
       countrycode[year] + countrycode[year2] + year^region,
     data     = d_treated,
     panel.id = panel_id,
@@ -439,10 +447,10 @@ H           <- 10
 horizons_fine <- seq(0, H, by = 0.1)
 
 countries_est <- d_treated %>%
-  filter(!is.na(loggdp_resid), !is.na(maxwind_95)) %>%
+  filter(!is.na(loggdp_resid), !is.na(cat1_plus)) %>%
   group_by(countrycode) %>%
   filter(
-    sum(maxwind_95, na.rm = TRUE) >= 2,   # at least 2 shock events
+    sum(cat1_plus, na.rm = TRUE) >= 2,   # at least 2 shock events
     n() >= 15                              # at least 15 years of data
   ) %>%
   pull(countrycode) %>%
@@ -468,11 +476,11 @@ for (i in seq_along(countries_est)) {
     # Controls: lagged residual growth + lagged shock
     df_h <- data.frame(
       y        = y_h,
-      shock    = d_c$maxwind_95,
+      shock    = d_c$cat1_plus,
       lag1_dy  = lag(d_c$gdp_resid_diff, 1),
       lag2_dy  = lag(d_c$gdp_resid_diff, 2),
-      lag1_d   = lag(d_c$maxwind_95, 1),
-      lag2_d   = lag(d_c$maxwind_95, 2)
+      lag1_d   = lag(d_c$cat1_plus, 1),
+      lag2_d   = lag(d_c$cat1_plus, 2)
     ) %>% filter(complete.cases(.))
 
     if (nrow(df_h) < 8 || var(df_h$shock) == 0) return(NULL)

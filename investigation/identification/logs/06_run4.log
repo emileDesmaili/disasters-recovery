@@ -1,0 +1,98 @@
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   3.5.2     ✔ tibble    3.3.0
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+(Permanently remove the following message with fixest_startup_msg(FALSE).)
+fixest 0.10.0:
+- vcov: new argument 'vcov' that replaces 'se' and 'cluster' in all functions
+(retro compatibility is ensured).
+- Breaking: arg. 'vcov' now comes after 'data'/'family', hence code using an
+offset w/t the arg. name may break (just use 'offset = stuff' now).
+- function 'dof()' has been renamed into 'ssc()' (i.e. small sample correction).
+From fixest 0.9.0 onward: BREAKING changes! 
+- In i():
+    + the first two arguments have been swapped! Now it's i(factor_var,
+    continuous_var) for interactions.
+    + argument 'drop' has been removed (put everything in 'ref' now).
+- In feglm(): 
+    + the default family becomes 'gaussian' to be in line with glm(). Hence, for
+    Poisson estimations, please use fepois() instead.
+Warning message:
+package 'latex2exp' was built under R version 4.5.2 
+d_p95: 8190 rows; 121 p95 events; 74 treated countries
+
+=== Baseline ===
+  Baseline gradient at h=5: 2.61 pp
+
+=== A. Sample restrictions ===
+  A1: Drop never-treated
+  A2: Drop 167 never-compound countries
+Saved compound_p95_rob_samples.png
+
+=== B. Climatology subsamples ===
+  High W̄ (≥20): n = 540 ; Low W̄ (<20, >0): n = 2790 
+Saved compound_p95_rob_clim.png
+
+=== C. LOCO ===
+  Continents: Africa, Americas, Asia, Europe, Oceania 
+  Drop Africa 
+  Drop Americas 
+  Drop Asia 
+  Drop Europe 
+  Drop Oceania 
+Saved compound_p95_rob_loco.png
+
+=== D. LOYO jackknife ===
+  Years with p95 events: 39 
+  Leave out 1970 
+  Leave out 1975 
+  Leave out 1985 
+  Leave out 1995 
+  Leave out 2000 
+  Leave out 2005 
+  Leave out 2010 
+
+=== E. LOOC jackknife ===
+  Treated countries: 74 
+  Leave out country 10 / 74 
+  Leave out country 20 / 74 
+  Leave out country 30 / 74 
+  Leave out country 40 / 74 
+  Leave out country 50 / 74 
+  Leave out country 60 / 74 
+  Leave out country 70 / 74 
+Saved compound_p95_rob_jackknife.png
+
+=== F. Placebo (500 draws, shuffle maxwind within country) ===
+  Placebo draw 100 / 500 
+  Placebo draw 200 / 500 
+  Placebo draw 300 / 500 
+  Placebo draw 400 / 500 
+  Placebo draw 500 / 500 
+  Actual gradient at h=5: 2.61 pp
+  Placebo p-value (two-sided): 0.22  ( 500 valid draws)
+Saved compound_p95_rob_placebo.png
+
+=== G. SE variants ===
+  Computing DK SE...
+  Computing two-way cluster SE...
+  Computing wild cluster bootstrap CI...
+  Wild bootstrap unavailable (fwildclusterboot not installed) — using country cluster as fallback
+
+SE comparison:
+# A tibble: 3 × 5
+  spec                   gradient grad_lo grad_hi grad_se
+  <chr>                     <dbl>   <dbl>   <dbl>   <dbl>
+1 DK (baseline)              2.61 -0.207     5.43    1.44
+2 Two-way cluster            2.61  0.330     4.89    1.16
+3 Wild cluster bootstrap     2.61  0.0179    5.21    1.32
+Saved compound_p95_rob_se.png
+Saved results_p95_robustness.rds
+
+Done.

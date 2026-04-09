@@ -1,0 +1,4 @@
+\beamer@sectionintoc {1}{The Problem: Recovery Time Tracks Cyclone Frequency}{3}{0}{1}
+\beamer@sectionintoc {2}{Solution: Country-Specific Shock Thresholds}{9}{0}{2}
+\beamer@sectionintoc {3}{Main Finding: Recovery Time Matters}{14}{0}{3}
+\beamer@sectionintoc {4}{Takeaways}{19}{0}{4}

@@ -1,0 +1,6 @@
+\beamer@sectionintoc {1}{Motivation \& Data}{2}{0}{1}
+\beamer@sectionintoc {2}{Direct Damage: Measurement}{5}{0}{2}
+\beamer@sectionintoc {3}{GDP Growth Response}{10}{0}{3}
+\beamer@sectionintoc {4}{Damage-Conditioned GDP Response}{12}{0}{4}
+\beamer@sectionintoc {5}{Reconciling the Two Approaches}{16}{0}{5}
+\beamer@sectionintoc {6}{Takeaways}{28}{0}{6}

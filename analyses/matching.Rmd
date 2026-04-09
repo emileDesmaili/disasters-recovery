@@ -75,17 +75,23 @@ data <- data_full %>%
     period   = ifelse(year <= 1990, "Pre-1990", "Post-1990")
   ) %>%
   filter(year >= 1969) %>%
-  mutate(
-    maxwind_p95 = quantile(maxwind[year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
-    maxwind_95 = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
-    cat1_plus = as.integer(maxwind >= 32.7),  # Cat 1+ threshold in m/s
-    cat2_plus = as.integer(maxwind >= 49.4),  # Cat 2+ threshold in m/s
-    cat3_plus = as.integer(maxwind >= 70.0),   # Cat 3+ threshold in m/s
-    region = countrycode(countrycode, "iso3c", "region"),
-    region = ifelse(is.na(region), "Other", region),
-    continent = countrycode(countrycode, "iso3c", "continent"),
-    continent = ifelse(is.na(continent), "Other", continent)
-  )
+mutate(
+  maxwind_p95 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.95, na.rm = TRUE),
+  maxwind_95  = as.integer(maxwind_p95 > 0 & maxwind >= maxwind_p95),
+
+  maxwind_p99 = quantile(maxwind[maxwind > 0 & year >= 1970 & year <= 2014], 0.99, na.rm = TRUE),
+  maxwind_99  = as.integer(maxwind_p99 > 0 & maxwind >= maxwind_p99),
+
+  cat1_plus = as.integer(maxwind >= 32.7),
+  cat2_plus = as.integer(maxwind >= 49.4),
+  cat3_plus = as.integer(maxwind >= 70.0),
+
+  region = countrycode(countrycode, "iso3c", "region"),
+  region = ifelse(is.na(region), "Other", region),
+
+  continent = countrycode(countrycode, "iso3c", "continent"),
+  continent = ifelse(is.na(continent), "Other", continent)
+)
 
 country_gdp <- data %>%
   filter(!is.na(loggdp)) %>%
@@ -98,17 +104,17 @@ country_gdp <- data %>%
     .groups = "drop"
   ) %>%
   mutate(
-    income_quartile = ntile(mean_loggdp, 4),
-    income_quartile_label = factor(
-      income_quartile,
-      levels = 1:4,
-      labels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)")
+    income_tercile = ntile(mean_loggdp, 3),
+    income_tercile_label = factor(
+      income_tercile,
+      levels = 1:3,
+      labels = c("T1 (Poorest)", "T2", "T3 (Richest)")
     )
   )
 
 data <- data %>%
   left_join(
-    country_gdp %>% select(countrycode, income_quartile, income_quartile_label,
+    country_gdp %>% select(countrycode, income_tercile, income_tercile_label,
                             mean_loggdp, mean_gdp_pc),
     by = "countrycode"
   )
@@ -122,7 +128,7 @@ data <- data %>%
 ```{r}
 # Classify treated vs never-treated
 treated_countries <- data %>%
-  filter(maxwind_95 == 1) %>%
+  filter(cat1_plus == 1) %>%
   pull(countrycode) %>%
   unique()
 
@@ -146,10 +152,7 @@ country_chars <- data %>%
   filter(year <= 1990) %>%
   group_by(countrycode, ever_treated, region, continent) %>%
   summarise(
-    mean_loggdp   = mean(loggdp, na.rm = TRUE),
-    mean_growth   = mean(gdp_diff, na.rm = TRUE),
-    mean_hc       = mean(hc, na.rm = TRUE),
-    mean_rkna     = mean(log(rkna + 1), na.rm = TRUE),
+    mean_land     = mean(land_sqkm, na.rm = TRUE),
     mean_pop      = mean(log(pop + 1), na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -176,9 +179,8 @@ cat(sprintf("%-25s %15s %15s %12s\n",
             "Variable", "Treated", "Never-Treated", "Std. Diff"))
 cat(paste(rep("-", 70), collapse = ""), "\n")
 
-vars <- c("mean_loggdp", "mean_growth", "mean_hc", "mean_rkna", "mean_pop")
-var_labels <- c("Log GDP per capita", "GDP Growth", "Human Capital (hc)",
-                "Log Capital Stock", "Log Population")
+vars <- c("mean_land", "mean_pop")
+var_labels <- c("Land Area (sq km)", "Log Population")
 
 std_diffs <- numeric(length(vars))
 for (i in seq_along(vars)) {
@@ -210,14 +212,12 @@ dir.create("figures", showWarnings = FALSE, recursive = TRUE)
 
 plot_df <- country_chars %>%
   mutate(group = ifelse(ever_treated, "Treated (40)", "Never-Treated (142)")) %>%
-  select(countrycode, group, mean_loggdp, mean_growth, mean_hc, mean_pop) %>%
+  select(countrycode, group, mean_land, mean_pop) %>%
   pivot_longer(cols = starts_with("mean_"),
                names_to = "variable", values_to = "value") %>%
   mutate(variable = case_when(
-    variable == "mean_loggdp" ~ "Log GDP per capita",
-    variable == "mean_growth" ~ "GDP Growth",
-    variable == "mean_hc"     ~ "Human Capital Index",
-    variable == "mean_pop"    ~ "Log Population"
+    variable == "mean_land" ~ "Land Area (sq km)",
+    variable == "mean_pop"  ~ "Log Population"
   ))
 
 p_dist <- ggplot(plot_df, aes(x = value, fill = group, color = group)) +
@@ -229,7 +229,7 @@ p_dist <- ggplot(plot_df, aes(x = value, fill = group, color = group)) +
                                  "Never-Treated (142)" = "steelblue")) +
   labs(x = NULL, y = "Density",
        title = "Pre-Treatment Covariate Distributions: Treated vs Never-Treated",
-       subtitle = "Pre-1990 country means",
+       subtitle = "Pre-1990 country means — Land Area & Population",
        fill = NULL, color = NULL) +
   theme_classic(base_size = 13) +
   theme(
@@ -257,8 +257,7 @@ cat("\nSaved: figures/covariate_imbalance.png\n")
 # 1. Prepare matching data (one row per country, pre-1990 means)
 # ------------------------------------------------------------------
 match_data <- country_chars %>%
-  select(countrycode, ever_treated, mean_loggdp, mean_growth,
-         mean_hc, mean_rkna, mean_pop, continent) %>%
+  select(countrycode, ever_treated, mean_land, mean_pop, continent) %>%
   rename(treated = ever_treated) %>%
   filter(complete.cases(.))
 
@@ -266,12 +265,12 @@ match_data <- country_chars %>%
 # 2. MatchIt: Coarsened Exact Matching (CEM)
 # ------------------------------------------------------------------
 m_cem <- matchit(
-  treated ~ mean_loggdp + mean_hc + continent,
+  treated ~ mean_land + mean_pop + continent,
   data = match_data,
   method = "cem",
   cutpoints = list(
-    mean_loggdp = 4,
-    mean_hc = 4
+    mean_land = 4,
+    mean_pop  = 4
   )
 )
 
@@ -288,9 +287,9 @@ love_plot <- love.plot(
   abs          = TRUE,
   var.order    = "unadjusted",
   var.names    = c(
-    mean_loggdp = "Log GDP per capita",
-    mean_hc     = "Human Capital Index",
-    continent   = "Continent"
+    mean_land = "Land Area (sq km)",
+    mean_pop  = "Log Population",
+    continent = "Continent"
   ),
   colors       = c("steelblue", "firebrick"),
   shapes       = c("circle", "triangle"),
@@ -324,16 +323,12 @@ names(group_colors) <- c(treated_label, control_label)
 
 plot_df_matched <- matched_data %>%
   mutate(group = ifelse(treated == 1, treated_label, control_label)) %>%
-  select(countrycode, group, weights,
-         mean_loggdp, mean_growth, mean_hc, mean_rkna, mean_pop) %>%
+  select(countrycode, group, weights, mean_land, mean_pop) %>%
   pivot_longer(cols = starts_with("mean_"),
                names_to = "variable", values_to = "value") %>%
   mutate(variable = case_when(
-    variable == "mean_loggdp" ~ "Log GDP per capita",
-    variable == "mean_growth" ~ "GDP Growth",
-    variable == "mean_hc"     ~ "Human Capital Index",
-    variable == "mean_rkna"   ~ "Log Capital Stock",
-    variable == "mean_pop"    ~ "Log Population"
+    variable == "mean_land" ~ "Land Area (sq km)",
+    variable == "mean_pop"  ~ "Log Population"
   ))
 
 p_density_matched <- ggplot(
@@ -341,14 +336,14 @@ p_density_matched <- ggplot(
   aes(x = value, fill = group, color = group, weight = weights)
 ) +
   geom_density(alpha = 0.3, linewidth = 0.8) +
-  facet_wrap(~variable, scales = "free", ncol = 3) +
+  facet_wrap(~variable, scales = "free", ncol = 2) +
   scale_fill_manual(values = group_colors) +
   scale_color_manual(values = group_colors) +
   labs(
     x        = NULL,
     y        = "Density",
     title    = "Post-Matching Covariate Distributions: Treated vs Control",
-    subtitle = "Weighted by CEM matching weights",
+    subtitle = "Weighted by CEM matching weights — Land Area & Population",
     fill     = NULL,
     color    = NULL
   ) +
@@ -362,7 +357,7 @@ p_density_matched <- ggplot(
   )
 
 ggsave("figures/cem_density_matched.png", p_density_matched,
-       width = 12, height = 7, dpi = 300)
+       width = 10, height = 5, dpi = 300)
 cat("Saved: figures/cem_density_matched.png\n")
 
 # ------------------------------------------------------------------
@@ -398,9 +393,9 @@ data_matched <- data %>%
     by = "countrycode"
   )
 
-mod_balance <- feols(maxwind ~ loggdp + pop + rkna + hc,
+mod_balance <- feols(maxwind ~ land_sqkm + pop + rkna + hc,
                  data = data, vcov = ~countrycode)
-mod_match <- feols(maxwind ~ loggdp + pop + rkna + hc,
+mod_match <- feols(maxwind ~ land_sqkm + pop + rkna + hc,
                  data = data_matched, vcov = ~countrycode)
 
 etable(mod_balance, mod_match, digits = 3)
@@ -409,12 +404,12 @@ etable(mod_balance, mod_match, digits = 3)
 ```{r}
 outcome  <- "loggdp"
 horizon  <- 10
-controls <- "l(gdp_diff,1:2) + l(maxwind_95,1:2)"
+controls <- "l(gdp_diff,1:2) + l(cat1_plus,1:2)"
 panel_id <- c("countrycode", "year")
 vcov_fm  <- DK ~ year
 
 irf_cem_yearfe <- lp_panel_inter(
-  data = data_matched, outcome = outcome, main_var = "maxwind_95",
+  data = data_matched, outcome = outcome, main_var = "cat1_plus",
   interact_var = "period", controls = controls,
   horizon = horizon,
   fe = "countrycode[year] + countrycode[year2] + year",
@@ -430,7 +425,7 @@ irf_cem_yearfe <- lp_panel_inter(
   )
 
 irf_cem_regionfe <- lp_panel_inter(
-  data = data_matched, outcome = outcome, main_var = "maxwind_95",
+  data = data_matched, outcome = outcome, main_var = "cat1_plus",
   interact_var = "period", controls = controls,
   horizon = horizon,
   fe = "countrycode[year] + countrycode[year2] + region^year",
@@ -447,7 +442,7 @@ irf_cem_regionfe <- lp_panel_inter(
 
 # Full-sample baseline
 irf_baseline <- lp_panel_inter(
-  data = data, outcome = outcome, main_var = "maxwind_95",
+  data = data, outcome = outcome, main_var = "cat1_plus",
   interact_var = "period", controls = controls,
   horizon = horizon,
   fe = "countrycode[year] + countrycode[year2] + year",
@@ -509,29 +504,28 @@ cat("\nSaved: figures/irf_cem.png\n")
 
 
 ```{r}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
 map_data <- world %>%
   left_join(
-    country_gdp %>% select(countrycode, income_quartile_label),
+    country_gdp %>% select(countrycode, income_tercile_label),
     by = c("adm0_a3" = "countrycode")
-  )
+  ) %>% 
+  #remove Antarctica and disputed areas
+  filter(!adm0_a3 %in% c("ATA"))
 
 fig_map <- ggplot(map_data) +
-  geom_sf(aes(fill = income_quartile_label), color = "white", linewidth = 0.15) +
+  geom_sf(aes(fill = income_tercile_label), color = "white", linewidth = 0.15) +
   scale_fill_manual(
     values = c(
-      "Q1 (Poorest)" = "#d73027",
-      "Q2"           = "#fc8d59",
-      "Q3"           = "#91bfdb",
-      "Q4 (Richest)" = "#1a6faf"
+      "T1 (Poorest)" = "#d73027",
+      "T2"           = "#91bfdb",
+      "T3 (Richest)" = "#1a6faf"
     ),
     na.value = "grey85",
-    name     = "Income Quartile"
+    name     = "Income Tercile"
   ) +
   coord_sf(crs = "+proj=robin") +
   labs(
-    title    = "Countries by Mean GDP per Capita Quartile",
+    title    = "Countries by Mean GDP per Capita Tercile",
     subtitle = "Based on log GDP per capita averaged over sample period",
     caption  = "Grey = no data"
   ) +
@@ -545,7 +539,7 @@ fig_map <- ggplot(map_data) +
   ) +
   guides(fill = guide_legend(nrow = 1, label.position = "bottom"))
 
-ggsave("figures/map_income_quartiles.png", fig_map,
+ggsave("figures/map_income_terciles.png", fig_map,
        width = 12, height = 6, dpi = 300)
 fig_map
 ```
@@ -572,18 +566,17 @@ irf_theme <- theme_classic(base_size = 14) +
 
 
 ```{r}
-irfs_quartile <- map_dfr(1:4, function(q) {
-  label <- levels(country_gdp$income_quartile_label)[q]
+irfs_tercile <- map_dfr(1:3, function(t) {
+  label <- levels(country_gdp$income_tercile_label)[t]
   cat(sprintf("  Estimating LP for %s...\n", label))
-  sub_data <- data %>% filter(income_quartile == q)
-
+  sub_data <- data %>% filter(income_tercile == t)
   tryCatch({
     lp_panel_inter(
       data = sub_data,
       outcome = outcome,
-      main_var = "maxwind_95",
+      main_var = "cat1_plus",
       interact_var = "period",
-      controls = make_controls("maxwind_95"),
+      controls = make_controls("cat1_plus"),
       horizon = horizon,
       fe = fe,
       panel_id = panel_id,
@@ -597,12 +590,12 @@ irfs_quartile <- map_dfr(1:4, function(q) {
 })
 
 # Clean category names
-irfs_quartile <- irfs_quartile %>%
+irfs_tercile <- irfs_tercile %>%
   mutate(category = ifelse(grepl("Pre", category), "Pre-1990", "Post-1990"))
 
 # Print summary at h=5
-cat("\n--- IRF at h=5 by income quartile and period ---\n")
-irfs_quartile %>%
+cat("\n--- IRF at h=5 by income tercile and period ---\n")
+irfs_tercile %>%
   filter(horizon == 5) %>%
   select(income_group, category, irf_mean, se, irf_down, irf_up) %>%
   arrange(income_group, category) %>%
@@ -610,19 +603,19 @@ irfs_quartile %>%
   print(digits = 4, row.names = FALSE)
 
 # ------------------------------------------------------------------
-# 4. Plot: 4-panel figure, one per quartile
+# 4. Plot: 3-panel figure, one per tercile
 # ------------------------------------------------------------------
-fig_quartile <- irfs_quartile %>%
+fig_tercile <- irfs_tercile %>%
   mutate(
     category = factor(category, levels = c("Pre-1990", "Post-1990")),
     income_group = factor(income_group,
-                          levels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)"))
+                          levels = c("T1 (Poorest)", "T2", "T3 (Richest)"))
   ) %>%
   ggplot(aes(x = horizon, y = irf_mean, color = category, fill = category)) +
   geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15, color = NA) +
   geom_line(linewidth = 1.1) +
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
-  facet_wrap(~income_group, ncol = 4) +
+  facet_wrap(~income_group, ncol = 3) +
   scale_color_manual(values = c("Pre-1990" = "steelblue", "Post-1990" = "firebrick")) +
   scale_fill_manual(values = c("Pre-1990" = "steelblue", "Post-1990" = "firebrick")) +
   scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
@@ -633,23 +626,21 @@ fig_quartile <- irfs_quartile %>%
   irf_theme +
   theme(legend.position = "top")
 
-ggsave("figures/irf_income_quartiles_by_period.png", fig_quartile,
-       width = 14, height = 4.5, dpi = 300)
-
-fig_quartile
+ggsave("figures/irf_income_terciles_by_period.png", fig_tercile,
+       width = 11, height = 4.5, dpi = 300)
+fig_tercile
 ```
 
 ```{r}
 # ------------------------------------------------------------------
-# IRFs by income quartile using interaction LP
+# IRFs by income tercile using interaction LP
 # ------------------------------------------------------------------
-
-irfs_quartile <- lp_panel_inter(
+irfs_tercile <- lp_panel_inter(
   data = data,
   outcome = outcome,
-  main_var = "maxwind_95",
-  interact_var = "income_quartile",
-  controls = make_controls("maxwind_95"),
+  main_var = "cat1_plus",
+  interact_var = "income_tercile",
+  controls = make_controls("cat1_plus"),
   horizon = horizon,
   fe = fe,
   panel_id = panel_id,
@@ -657,20 +648,17 @@ irfs_quartile <- lp_panel_inter(
 ) %>%
   mutate(
     income_group = case_when(
-      category == "1" ~ "Q1 (Poorest)",
-      category == "2" ~ "Q2",
-      category == "3" ~ "Q3",
-      category == "4" ~ "Q4 (Richest)"
+      category == "1" ~ "T1 (Poorest)",
+      category == "2" ~ "T2",
+      category == "3" ~ "T3 (Richest)"
     )
   )
 
 # ------------------------------------------------------------------
 # Print summary at h = 5
 # ------------------------------------------------------------------
-
-cat("\n--- IRF at h=5 by income quartile ---\n")
-
-irfs_quartile %>%
+cat("\n--- IRF at h=5 by income tercile ---\n")
+irfs_tercile %>%
   filter(horizon == 5) %>%
   select(income_group, irf_mean, se, irf_down, irf_up) %>%
   arrange(income_group) %>%
@@ -678,14 +666,13 @@ irfs_quartile %>%
   print(digits = 4, row.names = FALSE)
 
 # ------------------------------------------------------------------
-# Plot: 4-panel IRF figure
+# Plot: 3-panel IRF figure
 # ------------------------------------------------------------------
-
-fig_quartile <- irfs_quartile %>%
+fig_tercile <- irfs_tercile %>%
   mutate(
     income_group = factor(
       income_group,
-      levels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)")
+      levels = c("T1 (Poorest)", "T2", "T3 (Richest)")
     )
   ) %>%
   ggplot(aes(x = horizon, y = irf_mean)) +
@@ -704,7 +691,7 @@ fig_quartile <- irfs_quartile %>%
     linetype = "dashed",
     linewidth = 0.6
   ) +
-  facet_wrap(~income_group, ncol = 4) +
+  facet_wrap(~income_group, ncol = 3) +
   scale_y_continuous(
     labels = function(x) paste0(100 * x, "%")
   ) +
@@ -715,29 +702,27 @@ fig_quartile <- irfs_quartile %>%
   irf_theme
 
 ggsave(
-  "figures/irf_income_quartiles.png",
-  fig_quartile,
-  width = 14,
+  "figures/irf_income_terciles.png",
+  fig_tercile,
+  width = 11,
   height = 4.5,
   dpi = 300
 )
-
-fig_quartile
+fig_tercile
 ```
 
 ```{r}
-irfs_quartile <- map_dfr(1:4, function(q) {
-  label <- levels(country_gdp$income_quartile_label)[q]
+irfs_tercile <- map_dfr(1:3, function(t) {
+  label <- levels(country_gdp$income_tercile_label)[t]
   cat(sprintf("  Estimating LP for %s...\n", label))
-  sub_data <- data_matched %>% filter(income_quartile == q)
-
+  sub_data <- data_matched %>% filter(income_tercile == t)
   tryCatch({
     lp_panel_inter(
       data = sub_data,
       outcome = outcome,
-      main_var = "maxwind_95",
+      main_var = "cat1_plus",
       interact_var = "period",
-      controls = make_controls("maxwind_95"),
+      controls = make_controls("cat1_plus"),
       horizon = horizon,
       fe = fe,
       panel_id = panel_id,
@@ -751,12 +736,12 @@ irfs_quartile <- map_dfr(1:4, function(q) {
 })
 
 # Clean category names
-irfs_quartile <- irfs_quartile %>%
+irfs_tercile <- irfs_tercile %>%
   mutate(category = ifelse(grepl("Pre", category), "Pre-1990", "Post-1990"))
 
 # Print summary at h=5
-cat("\n--- IRF at h=5 by income quartile and period ---\n")
-irfs_quartile %>%
+cat("\n--- IRF at h=5 by income tercile and period ---\n")
+irfs_tercile %>%
   filter(horizon == 5) %>%
   select(income_group, category, irf_mean, se, irf_down, irf_up) %>%
   arrange(income_group, category) %>%
@@ -764,19 +749,19 @@ irfs_quartile %>%
   print(digits = 4, row.names = FALSE)
 
 # ------------------------------------------------------------------
-# 4. Plot: 4-panel figure, one per quartile
+# 4. Plot: 3-panel figure, one per tercile
 # ------------------------------------------------------------------
-fig_quartile <- irfs_quartile %>%
+fig_tercile <- irfs_tercile %>%
   mutate(
     category = factor(category, levels = c("Pre-1990", "Post-1990")),
     income_group = factor(income_group,
-                          levels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)"))
+                          levels = c("T1 (Poorest)", "T2", "T3 (Richest)"))
   ) %>%
   ggplot(aes(x = horizon, y = irf_mean, color = category, fill = category)) +
   geom_ribbon(aes(ymin = irf_down, ymax = irf_up), alpha = 0.15, color = NA) +
   geom_line(linewidth = 1.1) +
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
-  facet_wrap(~income_group, ncol = 4) +
+  facet_wrap(~income_group, ncol = 3) +
   scale_color_manual(values = c("Pre-1990" = "steelblue", "Post-1990" = "firebrick")) +
   scale_fill_manual(values = c("Pre-1990" = "steelblue", "Post-1990" = "firebrick")) +
   scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
@@ -787,22 +772,21 @@ fig_quartile <- irfs_quartile %>%
   irf_theme +
   theme(legend.position = "top")
 
-ggsave("figures/irf_income_quartiles_by_period_csm.png", fig_quartile,
-       width = 14, height = 4.5, dpi = 300)
-
-fig_quartile
+ggsave("figures/irf_income_terciles_by_period_csm.png", fig_tercile,
+       width = 11, height = 4.5, dpi = 300)
+fig_tercile
 ```
 ```{r}
 # ------------------------------------------------------------------
-# IRFs by income quartile — original + matched
+# IRFs by income tercile — original + matched
 # ------------------------------------------------------------------
-run_quartile_irfs <- function(df, label) {
+run_tercile_irfs <- function(df, label) {
   lp_panel_inter(
     data         = df,
     outcome      = outcome,
-    main_var     = "maxwind_95",
-    interact_var = "income_quartile",
-    controls     = make_controls("maxwind_95"),
+    main_var     = "cat1_plus",
+    interact_var = "income_tercile",
+    controls     = make_controls("cat1_plus"),
     horizon      = horizon,
     fe           = fe,
     panel_id     = panel_id,
@@ -811,22 +795,21 @@ run_quartile_irfs <- function(df, label) {
     mutate(
       sample = label,
       income_group = case_when(
-        category == "1" ~ "Q1 (Poorest)",
-        category == "2" ~ "Q2",
-        category == "3" ~ "Q3",
-        category == "4" ~ "Q4 (Richest)"
+        category == "1" ~ "T1 (Poorest)",
+        category == "2" ~ "T2",
+        category == "3" ~ "T3 (Richest)"
       )
     )
 }
 
-irfs_quartile <- bind_rows(
-  run_quartile_irfs(data,         "Unmatched"),
-  run_quartile_irfs(data_matched, "Matched")
+irfs_tercile <- bind_rows(
+  run_tercile_irfs(data,         "Unmatched"),
+  run_tercile_irfs(data_matched, "Matched")
 ) %>%
   mutate(
     income_group = factor(
       income_group,
-      levels = c("Q1 (Poorest)", "Q2", "Q3", "Q4 (Richest)")
+      levels = c("T1 (Poorest)", "T2", "T3 (Richest)")
     ),
     sample = factor(sample, levels = c("Unmatched", "Matched"))
   )
@@ -834,8 +817,8 @@ irfs_quartile <- bind_rows(
 # ------------------------------------------------------------------
 # Print summary at h = 5
 # ------------------------------------------------------------------
-cat("\n--- IRF at h=5 by income quartile ---\n")
-irfs_quartile %>%
+cat("\n--- IRF at h=5 by income tercile ---\n")
+irfs_tercile %>%
   filter(horizon == 5) %>%
   select(sample, income_group, irf_mean, se, irf_down, irf_up) %>%
   arrange(income_group, sample) %>%
@@ -843,9 +826,9 @@ irfs_quartile %>%
   print(digits = 4, row.names = FALSE)
 
 # ------------------------------------------------------------------
-# Plot: 4-panel IRF figure with matched overlay
+# Plot: 3-panel IRF figure with matched overlay
 # ------------------------------------------------------------------
-fig_quartile <- irfs_quartile %>%
+fig_tercile <- irfs_tercile %>%
   ggplot(aes(
     x     = horizon,
     y     = irf_mean,
@@ -859,7 +842,7 @@ fig_quartile <- irfs_quartile %>%
   ) +
   geom_line(linewidth = 1.1) +
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
-  facet_wrap(~income_group, ncol = 4) +
+  facet_wrap(~income_group, ncol = 3) +
   scale_color_manual(values = c("Unmatched" = "steelblue", "Matched" = "tomato")) +
   scale_fill_manual( values = c("Unmatched" = "steelblue", "Matched" = "tomato")) +
   scale_y_continuous(labels = function(x) paste0(100 * x, "%")) +
@@ -873,13 +856,13 @@ fig_quartile <- irfs_quartile %>%
   theme(legend.position = "bottom")
 
 ggsave(
-  "figures/irf_income_quartiles_matched.png",
-  fig_quartile,
-  width  = 14,
+  "figures/irf_income_terciles_matched.png",
+  fig_tercile,
+  width  = 11,
   height = 5,
   dpi    = 300
 )
-fig_quartile
+fig_tercile
 ```
 
 
@@ -890,9 +873,9 @@ fig_quartile
 irfs_continent <- lp_panel_inter(
   data = data,
   outcome = outcome,
-  main_var = "maxwind_95",
+  main_var = "cat1_plus",
   interact_var = "continent",
-  controls = make_controls("maxwind_95"),
+  controls = make_controls("cat1_plus"),
   horizon = horizon,
   fe = fe,
   panel_id = panel_id,
@@ -966,9 +949,9 @@ run_continent_irfs <- function(df, label) {
   lp_panel_inter(
     data         = df,
     outcome      = outcome,
-    main_var     = "maxwind_95",
+    main_var     = "cat1_plus",
     interact_var = "continent",
-    controls     = make_controls("maxwind_95"),
+    controls     = make_controls("cat1_plus"),
     horizon      = horizon,
     fe           = fe,
     panel_id     = panel_id,
