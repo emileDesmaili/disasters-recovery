@@ -1,0 +1,36 @@
+Strategy 2 baseline power grid
+=================================
+Sample sizes: treated=1288 obs, same-continent=8372 obs, all=8372 obs
+Same-continent shock counts: Cat1=374 Cat2=191 Cat3=102
+
+beta(h=5) across variants (sorted by SE, smallest first):
+                            label         beta5          se5     t_stat      poly
+   C2 Continuous wind scalar beta -0.0001817763 0.0001411136 -1.2881559    scalar
+         A4 Continuous wind (m/s) -0.0003147425 0.0002081624 -1.5120048 quadratic
+   C3 Continuous wind / 10 scalar -0.0018177631 0.0014111360 -1.2881559    scalar
+          A5 Continuous wind / 10 -0.0031474252 0.0020680848 -1.5219034 quadratic
+            C1 Cat 2+ scalar beta -0.0075184555 0.0044140547 -1.7032991    scalar
+       D3 Cat 1+ treated + scalar -0.0103585578 0.0053457716 -1.9377105    scalar
+            D2 Cat 1+ scalar beta -0.0133855567 0.0059167105 -2.2623308    scalar
+            A1 Cat 2+ (reference) -0.0129133197 0.0068867031 -1.8751091 quadratic
+           D1 Cat 1+ treated-only -0.0197244347 0.0069182237 -2.8510837 quadratic
+                  B1 Treated only -0.0136908662 0.0070998197 -1.9283400 quadratic
+              B2 + region-year FE -0.0103293601 0.0078742232 -1.3117942 quadratic
+               A3 Cat 1+ (64 kts) -0.0238777507 0.0081138089 -2.9428535 quadratic
+         B3 + continent-year-h FE -0.0162119456 0.0081422961 -1.9910779 quadratic
+                        A2 Cat 3+  0.0055941448 0.0112811449  0.4958845 quadratic
+    nobs
+   70553
+   70553
+   70553
+   70553
+   70553
+   11638
+   70553
+   70553
+   11638
+   11638
+   70553
+   70553
+   70553
+   70553

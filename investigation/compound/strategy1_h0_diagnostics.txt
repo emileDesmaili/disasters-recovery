@@ -1,0 +1,21 @@
+Strategy 1: h=0 anomaly diagnostics
+====================================
+egap_mean = 4.428
+
+D1: raw same-year GDP change vs gap
+                      what         slope           se          t
+                   Raw OLS -0.0004761417 0.0004352026 -1.0940689
+   Within-country demeaned  0.0001087560 0.0006126469  0.1775183
+      Country FE (raw gap)  0.0001087560 0.0007751134  0.1403098
+    Country FE (gap_resid) -0.0001630574 0.0008302006 -0.1964072
+
+D2: non-parametric horizon dummies
+  beta(h=0) = -0.0032 (SE 0.0027)  phi(h=0) = 0.0009 (SE 0.0011)
+  beta(h=5) = -0.0221 (SE 0.0074)  phi(h=5) = 0.0025 (SE 0.0015)
+
+D3: effect of pre_growth control on IRF at h=0, gap=15
+  no control: 1.6601%
+  + control:  1.6175%
+
+D4: anchored parameterization, IRF at h=0, gap=15
+  -0.0387%

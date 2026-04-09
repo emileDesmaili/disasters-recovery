@@ -1,0 +1,20 @@
+Strategy 2 diagnostics (event-stacked, forward time-to-next)
+=============================================================
+Sample: 182 countries, 8372 obs, 374 Cat 1+ shocks (events)
+Compound events (next shock within 3 yrs): 286 (76.5%)
+Right-censored events (no future shock in sample): 36 (9.6%)
+
+Variance decomposition of time_to_next_cap (over events):
+  Var(ttn) = 23.10
+  within   = 10.66 (46.1%)
+  between  = 12.44 (53.9%)
+
+Interaction slope at h=5 (non-parametric specs) and scalar psi (E3):
+                           spec           val          se           lo
+    (E1) phi(h=5): time_to_next  0.0001892977 0.001739742 -0.003220596
+   (E2) psi(h=5): compound_next -0.0130295343 0.014383907 -0.041221993
+                (E3) scalar psi -0.0090359679 0.010299684 -0.029223348
+            hi
+   0.003599192
+   0.015162924
+   0.011151412

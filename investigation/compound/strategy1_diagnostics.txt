@@ -1,0 +1,28 @@
+Strategy 1 diagnostics
+======================
+Sample: 182 countries, 8372 obs, 374 Cat 1+ shocks
+
+Hazard estimates (Cat 1+): mean=0.045  median=0.000  max=0.891
+Countries with >=5 Cat 1+ shocks: 18
+
+Poisson overdispersion test (shock | country FE):
+  dispersion ratio = 0.157 (1 = Poisson)
+  NB theta         = 6746.790
+  LR NB vs Poisson = -0.03
+
+Gap variance decomposition (shock-years only):
+  Var(gap)         = 23.46
+  within-country   = 8.37 (35.7%)
+  between-country  = 15.09 (64.3%)
+
+phi(h=5) across specs:
+                               spec         phi5          se            lo
+                 (1) Baseline + gap -0.001566247 0.001566550 -0.0046366839
+               (2) Residualized gap  0.002615711 0.001585261 -0.0004914018
+         (3) gap + shock x 1/lambda  0.001104531 0.001252378 -0.0013501309
+   (4) Residualized + region x year  0.002171330 0.001800341 -0.0013573391
+            hi
+   0.001504190
+   0.005722823
+   0.003559192
+   0.005699999

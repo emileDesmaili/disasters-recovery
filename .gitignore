@@ -16,3 +16,5 @@ processed_data/
 investigation/.DS_Store
 .DS_Store
 CLAUDE.md
+investigation/compound/strategy1_results.rds
+texput.log
